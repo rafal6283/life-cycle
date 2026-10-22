@@ -114,6 +114,24 @@ fun StatsScreen() {
             listOf(avg, prevAvg, cur.values.sum()) to (bars to labels)
         }
     }
+    val trendData by produceState<Triple<List<Map<Long, Long>>, List<pl.rafal.lifecycle.domain.Trends.Night>, List<pl.rafal.lifecycle.domain.Trends.Record>>?>(
+        null, entries, categories, stepBuckets, type, startDay,
+    ) {
+        val e = entries ?: return@produceState
+        val cats = catMap
+        value = withContext(Dispatchers.Default) {
+            val now = System.currentTimeMillis()
+            val sleepId = cats.values.firstOrNull { it.kind == pl.rafal.lifecycle.data.Kind.SLEEP }?.id
+            Triple(
+                pl.rafal.lifecycle.domain.Trends.typicalDay(e, period.start, period.end, now),
+                if (sleepId != null && type != PeriodType.YEAR)
+                    pl.rafal.lifecycle.domain.Trends.nights(e, sleepId, period.start, period.end, now) else emptyList(),
+                pl.rafal.lifecycle.domain.Trends.records(
+                    e, cats, pl.rafal.lifecycle.tracking.Steps.perDay(stepBuckets), period.start, period.end, now,
+                ),
+            )
+        }
+    }
     val commute = remember(entries, categories, startDay, type) {
         entries?.let { list ->
             val start = Fmt.dayStart(period.start)
@@ -122,7 +140,7 @@ fun StatsScreen() {
     }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { ScreenHeader("Statystyki") }
+        item { ScreenHeader("Trendy") }
         item {
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
                 PeriodType.entries.forEachIndexed { i, t ->
@@ -251,7 +269,28 @@ fun StatsScreen() {
                         Modifier.padding(horizontal = 16.dp).clip(RoundedCornerShape(18.dp))
                             .background(MaterialTheme.colorScheme.surface).padding(14.dp)
                     ) {
-                        BarsChart(bars, s.labels)
+                        val sel = selected
+                        BarsChart(
+                            bars, s.labels,
+                            avg = if (sel != null && type != PeriodType.YEAR) (s.totals[sel] ?: 0L) / s.days else null,
+                            animKey = "$type-$startDay-$sel",
+                        )
+                    }
+                }
+
+                trendData?.let { td ->
+                    if (td.first.any { it.isNotEmpty() }) {
+                        item { SectionTitle("Typowy dzień · co robisz o danej godzinie") }
+                        item { TrendCard { TypicalDayChart(td.first, categories, "$type-$startDay") } }
+                    }
+                    if (td.second.isNotEmpty()) {
+                        val sleepColor = catColor(categories.firstOrNull { it.kind == pl.rafal.lifecycle.data.Kind.SLEEP })
+                        item { SectionTitle("Pory snu") }
+                        item { TrendCard { SleepTimesChart(td.second, sleepColor, "$type-$startDay") } }
+                    }
+                    if (td.third.isNotEmpty()) {
+                        item { SectionTitle("Rekordy okresu") }
+                        item { RecordsCard(td.third) }
                     }
                 }
 

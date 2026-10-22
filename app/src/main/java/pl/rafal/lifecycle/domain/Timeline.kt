@@ -5,7 +5,9 @@ import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import pl.rafal.lifecycle.LifeApp
+import pl.rafal.lifecycle.data.Category
 import pl.rafal.lifecycle.data.Entry
+import pl.rafal.lifecycle.data.Kind
 import pl.rafal.lifecycle.data.Source
 import pl.rafal.lifecycle.util.Fmt
 import pl.rafal.lifecycle.util.Geo
@@ -234,5 +236,78 @@ object CsvExport {
             }
         }
         entries.size
+    }
+}
+
+/** Dodatkowe analizy do ekranu Trendy. */
+object Trends {
+    /** Typowy dzień: dla każdej z 24 godzin suma czasu kategorii ze wszystkich dni okresu. */
+    fun typicalDay(entries: List<Entry>, start: LocalDate, end: LocalDate, now: Long): List<Map<Long, Long>> {
+        val hours = List(24) { HashMap<Long, Long>() }
+        var d = start
+        val today = LocalDate.now()
+        while (d < end && d <= today) {
+            val f = Fmt.dayStart(d)
+            val t = Fmt.dayStart(d.plusDays(1))
+            val es = entries.filter { it.startAt < t && (it.endAt ?: now) > f }
+            for (s in Timeline.resolve(es, f, t, now)) {
+                var a = s.start
+                while (a < s.end) {
+                    val z = Instant.ofEpochMilli(a).atZone(Fmt.zone)
+                    val hourEnd = z.withMinute(0).withSecond(0).withNano(0).plusHours(1).toInstant().toEpochMilli()
+                    val b = min(hourEnd, s.end)
+                    val m = hours[z.hour]
+                    m[s.entry.categoryId] = (m[s.entry.categoryId] ?: 0L) + (b - a)
+                    a = b
+                }
+            }
+            d = d.plusDays(1)
+        }
+        return hours
+    }
+
+    data class Night(val day: LocalDate, val start: Long, val end: Long)
+
+    /** Noce w okresie (przypisane do dnia pobudki): najwcześniejszy początek i najpóźniejszy koniec snu. */
+    fun nights(entries: List<Entry>, sleepCat: Long, start: LocalDate, end: LocalDate, now: Long): List<Night> =
+        entries.filter { it.categoryId == sleepCat && (it.endAt ?: now) - it.startAt >= 2 * 3_600_000L }
+            .groupBy { Fmt.toLocalDate(it.endAt ?: now) }
+            .filterKeys { it >= start && it < end }
+            .map { (d, l) -> Night(d, l.minOf { it.startAt }, l.maxOf { it.endAt ?: now }) }
+            .sortedBy { it.day }
+
+    data class Record(val title: String, val value: String, val day: LocalDate, val iconKey: String?, val color: Int?)
+
+    fun records(
+        entries: List<Entry>, cats: Map<Long, Category>, steps: Map<LocalDate, Long>,
+        start: LocalDate, end: LocalDate, now: Long,
+    ): List<Record> {
+        val today = LocalDate.now()
+        val days = generateSequence(start) { it.plusDays(1) }.takeWhile { it < end && it <= today }
+            .associateWith { Timeline.dayTotals(entries, it, now) }
+            .filterValues { it.isNotEmpty() }
+        if (days.isEmpty()) return emptyList()
+        val out = mutableListOf<Record>()
+        fun cat(kind: String) = cats.values.firstOrNull { it.kind == kind }
+        fun best(c: Category?, title: String, lowest: Boolean = false) {
+            if (c == null) return
+            val vals = days.mapNotNull { (d, m) -> m[c.id]?.let { d to it } }.filter { it.second > 0 }
+            val r = (if (lowest) vals.minByOrNull { it.second } else vals.maxByOrNull { it.second }) ?: return
+            out += Record(title, Fmt.durationShort(r.second), r.first, c.icon, c.color)
+        }
+        best(cat(Kind.SLEEP), "Najdłuższy sen")
+        if (days.size >= 3) best(cat(Kind.SLEEP), "Najkrótszy sen", lowest = true)
+        best(cat(Kind.WORK), "Najdłuższy dzień pracy")
+        best(cat(Kind.HOME), "Najwięcej czasu w domu")
+        val activeKinds = setOf(Kind.WALK, Kind.RUN, Kind.BIKE, Kind.WORKOUT)
+        val active = days.map { (d, m) -> d to m.filterKeys { cats[it]?.kind in activeKinds }.values.sum() }
+            .maxByOrNull { it.second }
+        if (active != null && active.second > 0) {
+            out += Record("Najaktywniejszy dzień", Fmt.durationShort(active.second), active.first, "run", 0xFF34C759.toInt())
+        }
+        steps.filterKeys { it >= start && it < end }.maxByOrNull { it.value }?.let {
+            if (it.value > 0) out += Record("Najwięcej kroków", Fmt.steps(it.value), it.key, "walk", 0xFF34C759.toInt())
+        }
+        return out
     }
 }

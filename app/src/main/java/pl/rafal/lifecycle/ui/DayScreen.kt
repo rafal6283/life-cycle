@@ -66,6 +66,11 @@ private sealed interface TimelineRow {
 
 @Composable
 fun DayScreen() {
+    var periodIdx by rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
+    if (periodIdx != 0) {
+        PeriodDonutScreen(periodIdx) { periodIdx = it }
+        return
+    }
     val repo = LifeApp.instance.repo
     var epochDay by rememberSaveable { mutableLongStateOf(LocalDate.now().toEpochDay()) }
     val day = LocalDate.ofEpochDay(epochDay)
@@ -97,7 +102,9 @@ fun DayScreen() {
         out
     }
 
-    var clockMode by rememberSaveable { mutableStateOf(true) }
+    var clockMode by rememberSaveable { mutableStateOf(false) }
+    var selSlice by remember(epochDay) { mutableStateOf<Any?>(null) }
+    val daySlices = remember(segments, catMap) { mergeSlices(segments, catMap) }
     var editing by remember { mutableStateOf<Entry?>(null) }
     var adding by remember { mutableStateOf(false) }
     var drag by remember { mutableStateOf(0f) }
@@ -136,9 +143,11 @@ fun DayScreen() {
             },
             contentPadding = PaddingValues(bottom = 96.dp),
         ) {
+            item { Spacer(Modifier.height(8.dp)) }
+            item { PeriodSwitcher(0) { periodIdx = it } }
             item {
                 Row(
-                    Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 12.dp),
+                    Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 0.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     IconButton(onClick = { epochDay -= 1 }) {
@@ -170,39 +179,46 @@ fun DayScreen() {
 
             item {
                 Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
-                    Box(
-                        Modifier.size(280.dp).clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                        ) { clockMode = !clockMode },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (clockMode) {
+                    if (clockMode) {
+                        Box(Modifier.size(300.dp), contentAlignment = Alignment.Center) {
                             ClockRing(
                                 arcs = segments.map { RingArc(catColor(catMap[it.entry.categoryId]), it.start - from, it.end - from) },
                                 dayLength = to - from,
                                 now = if (isToday) now - from else null,
                                 modifier = Modifier.fillMaxSize(),
+                                stroke = 40.dp,
                             )
-                        } else {
-                            ProportionRing(
-                                totals.map { catColor(catMap[it.first]) to it.second.toFloat() },
-                                Modifier.fillMaxSize(),
-                            )
+                            DonutCenter(stepsTotal, tracked, null)
                         }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                if (tracked > 0) Fmt.durationShort(tracked) else "—",
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Text(
-                                if (clockMode) "śledzono · dotknij" else "proporcje · dotknij",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                    } else {
+                        AnimatedDonut(
+                            slices = daySlices.map { it.slice },
+                            selected = selSlice,
+                            onSelect = { selSlice = it },
+                            animKey = "$epochDay-${daySlices.size > 0}",
+                            modifier = Modifier.size(330.dp),
+                        ) {
+                            DonutCenter(stepsTotal, tracked, daySlices.firstOrNull { it.slice.key == selSlice }?.let { d ->
+                                val c = catMap[d.catId]
+                                val names = d.places.mapNotNull { placeMap[it]?.name }.distinct()
+                                listOf(
+                                    names.firstOrNull() ?: c?.name ?: "—",
+                                    Fmt.durationShort(d.end - d.start),
+                                    "${Fmt.time(d.start)}–${Fmt.time(d.end)} · ${if (tracked > 0) (d.end - d.start) * 100 / tracked else 0}%",
+                                )
+                            })
                         }
                     }
+                }
+            }
+            item {
+                Row(
+                    Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    androidx.compose.material3.FilterChip(!clockMode, { clockMode = false; selSlice = null }, { Text("Pierścień") })
+                    Spacer(Modifier.width(8.dp))
+                    androidx.compose.material3.FilterChip(clockMode, { clockMode = true }, { Text("Zegar 24 h") })
                 }
             }
 
@@ -387,5 +403,51 @@ private fun GapRow(start: Long, end: Long) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+
+private data class DaySlice(val slice: DonutSlice, val catId: Long, val start: Long, val end: Long, val places: List<Long>)
+
+/** Łączy sąsiednie segmenty tej samej kategorii w jeden wycinek pierścienia. */
+private fun mergeSlices(segments: List<Segment>, catMap: Map<Long, Category>): List<DaySlice> {
+    data class Acc(val catId: Long, val start: Long, var end: Long, val places: MutableList<Long>)
+    val out = mutableListOf<Acc>()
+    for (s in segments) {
+        val last = out.lastOrNull()
+        if (last != null && last.catId == s.entry.categoryId && s.start - last.end < 5 * 60_000L) {
+            last.end = s.end
+            s.entry.placeId?.let { last.places += it }
+        } else {
+            out += Acc(s.entry.categoryId, s.start, s.end, listOfNotNull(s.entry.placeId).toMutableList())
+        }
+    }
+    return out.map { a ->
+        val c = catMap[a.catId]
+        DaySlice(
+            DonutSlice(a.start, catColor(c), (a.end - a.start).toFloat(), c?.icon, Fmt.durationShort(a.end - a.start)),
+            a.catId, a.start, a.end, a.places,
+        )
+    }
+}
+
+@Composable
+private fun DonutCenter(steps: Long, tracked: Long, selected: List<String>?) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        if (selected != null) {
+            Text(selected[0], style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(selected[1], style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(selected[2], style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            Text(Fmt.steps(steps), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("kroków", style = MaterialTheme.typography.bodyMedium)
+            if (tracked > 0) {
+                Text(
+                    "śledzono ${Fmt.durationShort(tracked)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }

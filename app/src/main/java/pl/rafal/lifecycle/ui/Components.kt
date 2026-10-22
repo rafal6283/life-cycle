@@ -31,7 +31,13 @@ import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Flight
+import androidx.compose.material.icons.filled.LocalBar
+import androidx.compose.material.icons.filled.ShoppingBag
+import androidx.compose.material.icons.filled.Spa
+import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalCafe
 import androidx.compose.material.icons.filled.LocalHospital
@@ -140,6 +146,12 @@ object CatIcons {
         "tv" to Icons.Filled.Tv,
         "hair" to Icons.Filled.ContentCut,
         "church" to Icons.Filled.Church,
+        "moon" to Icons.Filled.DarkMode,
+        "heart" to Icons.Filled.Favorite,
+        "bar" to Icons.Filled.LocalBar,
+        "bag" to Icons.Filled.ShoppingBag,
+        "relax" to Icons.Filled.Spa,
+        "sofa" to Icons.Filled.Weekend,
         "unknown" to Icons.Filled.QuestionMark,
     )
     private val map = all.toMap()
@@ -336,7 +348,15 @@ fun ProportionRing(slices: List<Pair<Color, Float>>, modifier: Modifier, stroke:
 
 /** Słupki skumulowane (rozkład w czasie). */
 @Composable
-fun BarsChart(bars: List<List<Pair<Color, Long>>>, labels: List<String>, modifier: Modifier = Modifier) {
+fun BarsChart(
+    bars: List<List<Pair<Color, Long>>>,
+    labels: List<String>,
+    modifier: Modifier = Modifier,
+    avg: Long? = null,
+    animKey: Any = labels,
+) {
+    val grow = rememberGrow(animKey)
+    val avgColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
     val measurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
     val grid = MaterialTheme.colorScheme.outlineVariant
@@ -355,7 +375,7 @@ fun BarsChart(bars: List<List<Pair<Color, Long>>>, labels: List<String>, modifie
             var y = baseY
             val x = i * slot + (slot - bw) / 2
             stack.forEach { (c, v) ->
-                val h = chartH * (v.toFloat() / maxV)
+                val h = chartH * (v.toFloat() / maxV) * grow
                 if (h > 0f) drawRect(c, Offset(x, y - h), Size(bw, h))
                 y -= h
             }
@@ -367,5 +387,14 @@ fun BarsChart(bars: List<List<Pair<Color, Long>>>, labels: List<String>, modifie
         }
         val mt = measurer.measure(Fmt.durationShort(maxV), labelStyle)
         drawText(mt, topLeft = Offset(0f, 0f))
+        if (avg != null && avg > 0) {
+            val y = baseY - chartH * (avg.toFloat() / maxV)
+            drawLine(
+                avgColor, Offset(0f, y), Offset(size.width, y), 1.5.dp.toPx(),
+                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f)),
+            )
+            val at = measurer.measure("śr. " + Fmt.durationShort(avg), labelStyle)
+            drawText(at, topLeft = Offset(size.width - at.size.width, (y - at.size.height - 2f).coerceAtLeast(0f)))
+        }
     }
 }

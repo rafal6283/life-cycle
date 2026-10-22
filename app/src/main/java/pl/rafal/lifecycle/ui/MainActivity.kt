@@ -98,8 +98,8 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class Tab(val label: String, val icon: ImageVector) {
-    DAY("Dzień", Icons.Filled.DonutLarge),
-    STATS("Statystyki", Icons.Filled.BarChart),
+    DAY("Pierścień", Icons.Filled.DonutLarge),
+    STATS("Trendy", Icons.Filled.BarChart),
     PLACES("Miejsca", Icons.Filled.Place),
     SETTINGS("Ustawienia", Icons.Filled.Settings),
 }

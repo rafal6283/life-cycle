@@ -392,6 +392,17 @@ fun CategoriesScreen(onBack: () -> Unit) {
         ScreenHeader("Kategorie", onBack = onBack) {
             IconButton(onClick = { adding = true }) { Icon(Icons.Filled.Add, "Dodaj kategorię") }
         }
+        val scope = rememberCoroutineScope()
+        val ctx = LocalContext.current
+        TextButton(
+            onClick = {
+                scope.launch {
+                    applyLifeCyclePalette(categories)
+                    Toast.makeText(ctx, "Kolory i ikony w stylu Life Cycle", Toast.LENGTH_SHORT).show()
+                }
+            },
+            modifier = Modifier.padding(horizontal = 12.dp),
+        ) { Text("Zastosuj kolory i ikony w stylu Life Cycle") }
         LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
             items(categories, key = { it.id }) { c ->
                 Row(
@@ -527,5 +538,33 @@ private fun CategoryEditorDialog(category: Category?, onDismiss: () -> Unit) {
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Anuluj") } },
         )
+    }
+}
+
+
+/** Paleta zbliżona do oryginalnej aplikacji — dla kategorii domyślnych (po rodzaju lub nazwie). */
+private suspend fun applyLifeCyclePalette(categories: List<Category>) {
+    val repo = LifeApp.instance.repo
+    val byKind = mapOf(
+        Kind.SLEEP to (0xFF2F5D7C to "moon"),
+        Kind.HOME to (0xFF9B74B8 to "home"),
+        Kind.WORK to (0xFFEFC020 to "work"),
+        Kind.TRAVEL to (0xFF8F928B to "car"),
+        Kind.WALK to (0xFFF64B7D to "walk"),
+        Kind.RUN to (0xFFE8573F to "run"),
+        Kind.BIKE to (0xFF4FA3A5 to "bike"),
+        Kind.WORKOUT to (0xFFF4B3C6 to "heart"),
+        Kind.UNKNOWN to (0xFFB8B8BD to "unknown"),
+    )
+    val byName = mapOf(
+        "Jedzenie" to (0xFFE8915A to "food"),
+        "Zakupy" to (0xFF7FB069 to "bag"),
+        "Znajomi" to (0xFFD1789C to "friends"),
+        "Rozrywka" to (0xFF6F6874 to "fun"),
+        "Nauka" to (0xFF4A90C2 to "study"),
+    )
+    for (c in categories) {
+        val (color, icon) = byKind[c.kind] ?: byName[c.name] ?: continue
+        repo.saveCategory(c.copy(color = color.toInt(), icon = icon))
     }
 }
