@@ -1,4 +1,4 @@
-# Life Cycle (Android)
+# Doba (Android)
 
 Automatyczne śledzenie czasu w stylu iOS-owej aplikacji Life Cycle: pierścień dnia, oś czasu, statystyki tygodniowe, miesięczne i roczne oraz mapa miejsc.
 

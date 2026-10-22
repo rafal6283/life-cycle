@@ -170,7 +170,7 @@ fun PermissionsScreen(onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenHeader("Uprawnienia", onBack = onBack)
         Text(
-            "Life Cycle działa w pełni automatycznie tylko wtedy, gdy ma wszystkie poniższe zgody.",
+            "Doba działa w pełni automatycznie tylko wtedy, gdy ma wszystkie poniższe zgody.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 20.dp),
@@ -312,7 +312,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
         Box(Modifier.size(170.dp), contentAlignment = Alignment.Center) {
             ProportionRing(demo, Modifier.fillMaxSize(), stroke = 22.dp)
         }
-        Text("Life Cycle", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+        Text("Doba", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
         Text(
             "Automatycznie zapisuje, gdzie i jak spędzasz czas — dom, praca, sen, podróże i sport. Bez klikania.",
             style = MaterialTheme.typography.bodyLarge,

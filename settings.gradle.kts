@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "LifeCycle"
+rootProject.name = "Doba"
 include(":app")

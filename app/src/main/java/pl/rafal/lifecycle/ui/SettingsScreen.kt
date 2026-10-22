@@ -149,13 +149,13 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
             NavRow("Kategorie", "Nazwy, kolory i ikony") { onOpen("categories") }
             HorizontalDivider(Modifier.padding(start = 16.dp))
             NavRow("Eksportuj do CSV", "Wszystkie wpisy w jednym pliku") {
-                exportLauncher.launch("life-cycle-${LocalDate.now()}.csv")
+                exportLauncher.launch("doba-${LocalDate.now()}.csv")
             }
         }
 
         SectionTitle("O aplikacji")
         Group {
-            NavRow("Life Cycle dla Androida", "Wersja ${BuildConfig.VERSION_NAME}") { }
+            NavRow("Doba", "Wersja ${BuildConfig.VERSION_NAME}") { }
         }
     }
 }
