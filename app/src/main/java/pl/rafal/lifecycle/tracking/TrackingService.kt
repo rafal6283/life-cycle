@@ -58,6 +58,7 @@ class TrackingService : LifecycleService() {
     private lateinit var fused: FusedLocationProviderClient
     private var highMode: Boolean? = null
     private var started = false
+    private var stepSensor: StepSensor? = null
 
     private val callback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
@@ -86,6 +87,7 @@ class TrackingService : LifecycleService() {
             return
         }
         started = true
+        stepSensor = StepSensor(this).also { it.start() }
         ContextCompat.registerReceiver(
             this, screenReceiver,
             IntentFilter().apply {
@@ -123,6 +125,7 @@ class TrackingService : LifecycleService() {
         super.onStartCommand(intent, flags, startId)
         if (started) {
             ActivityRecognitionHelper.register(this)
+            stepSensor?.start()
             highMode = null
             requestUpdates(app.engine.moving.value)
         }
@@ -162,6 +165,7 @@ class TrackingService : LifecycleService() {
 
     override fun onDestroy() {
         if (started) {
+            stepSensor?.stop()
             fused.removeLocationUpdates(callback)
             try {
                 unregisterReceiver(screenReceiver)
@@ -296,6 +300,7 @@ class WatchdogWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
         }
         safe("Wykrywanie snu") { SleepDetector.run(ctx) }
         safe("Import treningów") { WorkoutImporter.run(ctx) }
+        safe("Import kroków") { StepsImporter.run(ctx) }
         safe("Sprawdzanie celów") { GoalChecker.run(ctx) }
         safe("Podsumowanie tygodnia") { WeeklySummary.maybeNotify(ctx) }
         safe("Kopia zapasowa") { Backup.autoBackup(ctx) }

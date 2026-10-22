@@ -7,6 +7,7 @@ import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.SleepSessionRecord
+import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
@@ -27,7 +28,8 @@ object HealthConnectHelper {
         HealthPermission.getReadPermission(ExerciseSessionRecord::class),
         HealthPermission.getReadPermission(DistanceRecord::class),
     )
-    val PERMISSIONS = SLEEP_PERMISSIONS + WORKOUT_PERMISSIONS
+    val PERMISSIONS = SLEEP_PERMISSIONS + WORKOUT_PERMISSIONS +
+        setOf(HealthPermission.getReadPermission(StepsRecord::class))
 
     fun status(ctx: Context): Int = HealthConnectClient.getSdkStatus(ctx)
 

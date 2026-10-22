@@ -74,9 +74,11 @@ class DobaWidget : AppWidgetProvider() {
                 views.setTextViewText(R.id.title, "Doba")
                 views.setTextViewText(R.id.subtitle, if (tracked > 0) "Śledzono ${Fmt.durationShort(tracked)}" else "Brak danych z dziś")
             }
+            val steps = pl.rafal.lifecycle.tracking.Steps.total(app.db.steps().getRange(from, to))
+            val legend = totals.take(3).joinToString(" · ") { (id, v) -> "${cats[id]?.name ?: "—"} ${Fmt.durationShort(v)}" }
             views.setTextViewText(
                 R.id.legend,
-                totals.take(3).joinToString(" · ") { (id, v) -> "${cats[id]?.name ?: "—"} ${Fmt.durationShort(v)}" },
+                (if (steps > 0) "👟 ${Fmt.steps(steps)} kroków\n" else "") + legend,
             )
             views.setOnClickPendingIntent(R.id.root, Notifications.openApp(ctx, null))
             mgr.updateAppWidget(ids, views)

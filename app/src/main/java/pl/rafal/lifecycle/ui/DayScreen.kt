@@ -109,6 +109,14 @@ fun DayScreen() {
     val weekRange = remember(day) { Goals.weekRange(day) }
     val weekEntries by remember(weekRange) { repo.entriesIn(weekRange.first, weekRange.second) }
         .collectAsState(initial = emptyList())
+    val stepBuckets by remember(from, to) { LifeApp.instance.db.steps().observeRange(from, to) }
+        .collectAsState(initial = emptyList())
+    val stepsTotal = remember(stepBuckets) { pl.rafal.lifecycle.tracking.Steps.total(stepBuckets) }
+    val stepHours = remember(stepBuckets, day) { pl.rafal.lifecycle.tracking.Steps.hoursOfDay(stepBuckets, day) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var stepGoalTick by remember { mutableStateOf(0) }
+    val stepGoal = remember(stepGoalTick) { pl.rafal.lifecycle.util.Prefs(ctx).stepGoal }
+    var editStepGoal by remember { mutableStateOf(false) }
     val goalProgress = remember(goals, weekEntries, now, day) {
         goals.map { Goals.progress(it, weekEntries, day, now) }
     }
@@ -210,6 +218,11 @@ fun DayScreen() {
                 }
             }
 
+            item {
+                Spacer(Modifier.height(10.dp))
+                StepsCard(stepsTotal, stepHours, stepGoal) { editStepGoal = true }
+            }
+
             if (goalProgress.isNotEmpty()) {
                 item { SectionTitle(if (isToday) "Cele" else "Cele (stan na ten dzień)") }
                 item {
@@ -268,6 +281,7 @@ fun DayScreen() {
 
     editing?.let { EntryEditorDialog(entry = it, defaultDay = day, onDismiss = { editing = null }) }
     if (showMap) DayMapDialog(day) { showMap = false }
+    if (editStepGoal) StepGoalDialog { editStepGoal = false; stepGoalTick++ }
     if (quick) QuickSwitchDialog { quick = false }
     if (adding) EntryEditorDialog(entry = null, defaultDay = day, onDismiss = { adding = false })
 }

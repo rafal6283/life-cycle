@@ -131,6 +131,10 @@ fun AppRoot(startTab: String?) {
             } catch (_: Exception) {
             }
             try {
+                pl.rafal.lifecycle.tracking.StepsImporter.run(ctx)
+            } catch (_: Exception) {
+            }
+            try {
                 pl.rafal.lifecycle.widget.DobaWidget.updateAll(ctx)
             } catch (_: Exception) {
             }
@@ -248,7 +252,7 @@ fun PermissionList(modifier: Modifier = Modifier) {
         }
         PermissionRow(
             Icons.Filled.DirectionsRun, "Aktywność fizyczna",
-            "Odróżnia chodzenie, bieganie, rower i jazdę samochodem.", act, "Zezwól",
+            "Liczy kroki i odróżnia chodzenie, bieganie, rower i jazdę samochodem.", act, "Zezwól",
         ) {
             if (Build.VERSION.SDK_INT >= 29) singleLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
         }
@@ -265,9 +269,9 @@ fun PermissionList(modifier: Modifier = Modifier) {
             open(TrackingControl.batteryIntent(ctx))
         }
         PermissionRow(
-            Icons.Filled.Bedtime, "Sen i treningi z Health Connect (opcjonalnie)",
+            Icons.Filled.Bedtime, "Sen, treningi i kroki z Health Connect",
             when (hcStatus) {
-                HealthConnectClient.SDK_AVAILABLE -> "Czyta sen i treningi z zegarka lub innej aplikacji. Bez tego sen wykrywany jest z nocnej przerwy w używaniu telefonu."
+                HealthConnectClient.SDK_AVAILABLE -> "Czyta sen, treningi i kroki z zegarka lub innej aplikacji. Bez tego sen wykrywany jest z nocnej przerwy w używaniu telefonu."
                 HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> "Health Connect wymaga aktualizacji."
                 else -> "Health Connect nie jest dostępny na tym telefonie — sen będzie wykrywany automatycznie."
             },

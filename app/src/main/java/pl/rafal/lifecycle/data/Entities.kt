@@ -140,3 +140,16 @@ data class Goal(
     val count: Int,
     val notify: Boolean,
 )
+
+object StepSource {
+    const val PHONE = "PHONE"
+    const val HC = "HC"
+}
+
+/** Kroki w jednej godzinie z jednego źródła; liczy się wyższa wartość z godziny. */
+@Entity(tableName = "steps", primaryKeys = ["hourStart", "source"])
+data class StepBucket(
+    val hourStart: Long,
+    val source: String,
+    val steps: Long,
+)

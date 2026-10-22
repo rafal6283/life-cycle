@@ -21,6 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Flag
@@ -54,6 +55,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -554,4 +556,196 @@ fun InsightsCard(lines: List<String>) {
 @Composable
 fun SmallOutlinedButton(text: String, onClick: () -> Unit) {
     OutlinedButton(onClick = onClick) { Text(text) }
+}
+
+// ---------------------------------------------------------------------------
+// Kroki
+// ---------------------------------------------------------------------------
+
+val StepsGreen = Color(0xFF34C759)
+
+@Composable
+fun StepsCard(steps: Long, hours: List<Long>, goal: Int, onClick: () -> Unit) {
+    val frac = if (goal > 0) steps.toFloat() / goal else 0f
+    Column(
+        Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onClick)
+            .padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(34.dp).clip(androidx.compose.foundation.shape.CircleShape).background(StepsGreen),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    androidx.compose.material.icons.Icons.AutoMirrored.Filled.DirectionsWalk, null,
+                    tint = Color.White, modifier = Modifier.size(20.dp),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "${Fmt.steps(steps)} kroków",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    if (goal > 0) "cel ${Fmt.steps(goal.toLong())} · ${(frac * 100).toInt()}%" + (if (steps >= goal) " ✓" else "")
+                    else "bez celu",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (goal in 1..steps) StepsGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (goal > 0) {
+            Spacer(Modifier.height(8.dp))
+            ShareBar(frac.coerceAtMost(1f), StepsGreen)
+        }
+        if (hours.any { it > 0 }) {
+            Spacer(Modifier.height(10.dp))
+            val track = MaterialTheme.colorScheme.surfaceVariant
+            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(36.dp)) {
+                val max = (hours.maxOrNull() ?: 0L).coerceAtLeast(1L)
+                val slot = size.width / 24
+                val bw = slot * 0.6f
+                hours.forEachIndexed { i, v ->
+                    val x = i * slot + (slot - bw) / 2
+                    drawRect(track, androidx.compose.ui.geometry.Offset(x, size.height - 2f), androidx.compose.ui.geometry.Size(bw, 2f))
+                    if (v > 0) {
+                        val h = (size.height * v / max).coerceAtLeast(3f)
+                        drawRect(StepsGreen, androidx.compose.ui.geometry.Offset(x, size.height - h), androidx.compose.ui.geometry.Size(bw, h))
+                    }
+                }
+            }
+            Row(Modifier.fillMaxWidth()) {
+                listOf("0", "6", "12", "18", "24").forEachIndexed { i, l ->
+                    Text(
+                        l,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                        textAlign = when (i) {
+                            0 -> androidx.compose.ui.text.style.TextAlign.Start
+                            4 -> androidx.compose.ui.text.style.TextAlign.End
+                            else -> androidx.compose.ui.text.style.TextAlign.Center
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StepGoalDialog(onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val prefs = remember { pl.rafal.lifecycle.util.Prefs(ctx) }
+    var goal by remember { mutableFloatStateOf(prefs.stepGoal.toFloat()) }
+    var notify by remember { mutableStateOf(prefs.stepGoalNotify) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Dzienny cel kroków") },
+        text = {
+            Column {
+                Text(Fmt.steps(goal.toLong()), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Slider(
+                    value = goal,
+                    onValueChange = { goal = (Math.round(it / 500f) * 500).toFloat() },
+                    valueRange = 2000f..30000f,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Powiadom po osiągnięciu", Modifier.weight(1f))
+                    Switch(notify, { notify = it })
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                prefs.stepGoal = goal.toInt()
+                prefs.stepGoalNotify = notify
+                onDismiss()
+            }) { Text("Zapisz") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Anuluj") } },
+    )
+}
+
+@Composable
+fun StepsStatsCard(avg: Long, prevAvg: Long, total: Long, bars: List<Long>, labels: List<String>, avgLabel: String) {
+    Column(
+        Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface).padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Column(Modifier.weight(1f)) {
+                Text(Fmt.steps(avg), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(avgLabel, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                if (prevAvg > 0) {
+                    val diff = avg - prevAvg
+                    Text(
+                        (if (diff >= 0) "▲ " else "▼ ") + Fmt.steps(kotlin.math.abs(diff)) +
+                            " (${if (diff >= 0) "+" else ""}${diff * 100 / prevAvg}%)",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (diff >= 0) StepsGreen else Color(0xFFFF3B30),
+                    )
+                }
+                Text(
+                    "razem ${Fmt.steps(total)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        StepBars(bars, labels)
+    }
+}
+
+@Composable
+private fun StepBars(bars: List<Long>, labels: List<String>) {
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val grid = MaterialTheme.colorScheme.outlineVariant
+    val ctx = LocalContext.current
+    val goal = remember { pl.rafal.lifecycle.util.Prefs(ctx).stepGoal }
+    androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(150.dp)) {
+        val labelH = 20.dp.toPx()
+        val chartH = size.height - labelH
+        val max = maxOf(bars.maxOrNull() ?: 0L, goal.toLong(), 1L)
+        val n = bars.size.coerceAtLeast(1)
+        val slot = size.width / n
+        val bw = slot * 0.62f
+        val goalY = chartH - chartH * goal / max
+        if (goal > 0) {
+            drawLine(
+                StepsGreen.copy(alpha = 0.5f),
+                androidx.compose.ui.geometry.Offset(0f, goalY),
+                androidx.compose.ui.geometry.Offset(size.width, goalY),
+                strokeWidth = 1.5f,
+                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f)),
+            )
+        }
+        drawLine(grid, androidx.compose.ui.geometry.Offset(0f, chartH), androidx.compose.ui.geometry.Offset(size.width, chartH), 1f)
+        bars.forEachIndexed { i, v ->
+            val h = chartH * v / max
+            val x = i * slot + (slot - bw) / 2
+            if (h > 0f) {
+                drawRect(
+                    if (goal in 1..v) StepsGreen else StepsGreen.copy(alpha = 0.55f),
+                    androidx.compose.ui.geometry.Offset(x, chartH - h),
+                    androidx.compose.ui.geometry.Size(bw, h),
+                )
+            }
+            if ((n <= 12 || i % 5 == 0) && i < labels.size) {
+                val t = measurer.measure(labels[i], style)
+                drawText(
+                    t,
+                    topLeft = androidx.compose.ui.geometry.Offset(i * slot + slot / 2 - t.size.width / 2f, chartH + 4.dp.toPx()),
+                )
+            }
+        }
+    }
 }

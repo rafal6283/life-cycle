@@ -17,6 +17,8 @@ import pl.rafal.lifecycle.data.GoalType
 import pl.rafal.lifecycle.data.Kind
 import pl.rafal.lifecycle.data.Place
 import pl.rafal.lifecycle.data.Source
+import pl.rafal.lifecycle.data.StepBucket
+import pl.rafal.lifecycle.tracking.Steps
 import pl.rafal.lifecycle.tracking.Notifications
 import pl.rafal.lifecycle.util.Fmt
 import pl.rafal.lifecycle.util.Prefs
@@ -88,6 +90,7 @@ object Goals {
 object GoalChecker {
     suspend fun run(ctx: Context) {
         val app = ctx.applicationContext as LifeApp
+        checkSteps(ctx, app)
         val goals = app.db.goals().getAll().filter { it.notify }
         if (goals.isEmpty()) return
         val prefs = Prefs(ctx)
@@ -154,6 +157,22 @@ object GoalChecker {
     }
 }
 
+private suspend fun checkSteps(ctx: Context, app: LifeApp) {
+    val prefs = Prefs(ctx)
+    if (!prefs.stepGoalNotify || prefs.stepGoal <= 0) return
+    val today = LocalDate.now()
+    val key = "steps_${today.toEpochDay()}"
+    if (prefs.goalNotified(key)) return
+    val steps = Steps.total(app.db.steps().getRange(Fmt.dayStart(today), Fmt.dayStart(today.plusDays(1))))
+    if (steps >= prefs.stepGoal) {
+        prefs.setGoalNotified(key)
+        Notifications.simple(
+            ctx, 3999, Notifications.CH_GOALS,
+            "Cel kroków osiągnięty 🎉", "${Fmt.steps(steps)} kroków dzisiaj (cel ${Fmt.steps(prefs.stepGoal.toLong())}).", null,
+        )
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Podsumowanie tygodnia
 // ---------------------------------------------------------------------------
@@ -191,6 +210,16 @@ object WeeklySummary {
                 val prev = s.prevTotals[id] ?: 0L
                 lines += "${cats[id]?.name}: ${Fmt.durationShort(v)}" + (if (prev > 0) " (${signed(v - prev)})" else "")
             }
+        val stepDays = Steps.perDay(app.db.steps().getRange(from, to))
+        val curDays = stepDays.filterKeys { it >= period.start && it < period.end }.values
+        val prevDays = stepDays.filterKeys { it < period.start }.values
+        if (curDays.isNotEmpty()) {
+            val avg = curDays.sum() / curDays.size
+            val prevAvg = if (prevDays.isEmpty()) 0L else prevDays.sum() / prevDays.size
+            val diff = avg - prevAvg
+            lines += "Kroki: średnio ${Fmt.steps(avg)} dziennie" +
+                (if (prevAvg > 0) " (${if (diff >= 0) "+" else "−"}${Fmt.steps(abs(diff))})" else "")
+        }
         val work = cats.values.firstOrNull { it.kind == Kind.WORK }
         if (work != null) {
             val best = s.buckets.withIndex().maxByOrNull { it.value[work.id] ?: 0L }
@@ -396,6 +425,11 @@ object Backup {
                     .put("distanceM", e.distanceM ?: JSONObject.NULL))
             }
         })
+        root.put("steps", JSONArray().apply {
+            db.steps().all().forEach { b ->
+                put(JSONObject().put("h", b.hourStart).put("s", b.source).put("n", b.steps))
+            }
+        })
         root.put("goals", JSONArray().apply {
             db.goals().getAll().forEach { g ->
                 put(JSONObject().put("id", g.id).put("categoryId", g.categoryId).put("type", g.type)
@@ -422,6 +456,7 @@ object Backup {
         val places = root.getJSONArray("places")
         val entries = root.getJSONArray("entries")
         val goals = root.optJSONArray("goals") ?: JSONArray()
+        val steps = root.optJSONArray("steps") ?: JSONArray()
         db.withTransaction {
             db.entries().deleteAll()
             db.places().deleteAll()
@@ -453,6 +488,11 @@ object Backup {
                 )
             }
             db.entries().insertAll(list)
+            db.steps().deleteAll()
+            db.steps().upsert((0 until steps.length()).map { i ->
+                val b = steps.getJSONObject(i)
+                StepBucket(b.getLong("h"), b.getString("s"), b.getLong("n"))
+            })
             for (i in 0 until goals.length()) {
                 val g = goals.getJSONObject(i)
                 db.goals().insert(

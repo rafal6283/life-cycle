@@ -51,6 +51,8 @@ object Fmt {
     fun distance(m: Double): String =
         if (m < 1000) "${m.toInt()} m" else String.format(PL, "%.1f km", m / 1000)
 
+    fun steps(n: Long): String = String.format(PL, "%,d", n)
+
     fun durationShort(ms: Long): String {
         val m = (ms / 60_000).toInt()
         val h = m / 60
@@ -114,6 +116,18 @@ class Prefs(ctx: Context) {
     var lastBackupAt: Long
         get() = p.getLong("lastBackupAt", 0L)
         set(v) = p.edit().putLong("lastBackupAt", v).apply()
+
+    var stepsHc: Boolean
+        get() = p.getBoolean("stepsHc", true)
+        set(v) = p.edit().putBoolean("stepsHc", v).apply()
+
+    var stepGoal: Int
+        get() = p.getInt("stepGoal", 8000)
+        set(v) = p.edit().putInt("stepGoal", v).apply()
+
+    var stepGoalNotify: Boolean
+        get() = p.getBoolean("stepGoalNotify", true)
+        set(v) = p.edit().putBoolean("stepGoalNotify", v).apply()
 
     fun goalNotified(key: String): Boolean = p.getBoolean("gn_$key", false)
     fun setGoalNotified(key: String) = p.edit().putBoolean("gn_$key", true).apply()

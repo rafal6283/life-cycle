@@ -5,6 +5,7 @@ import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Delete
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -40,6 +41,33 @@ interface CategoryDao {
     suspend fun delete(c: Category)
 
     @Query("DELETE FROM categories")
+    suspend fun deleteAll()
+}
+
+@Dao
+interface StepDao {
+    @Query("SELECT * FROM steps WHERE hourStart >= :from AND hourStart < :to")
+    fun observeRange(from: Long, to: Long): Flow<List<StepBucket>>
+
+    @Query("SELECT * FROM steps WHERE hourStart >= :from AND hourStart < :to")
+    suspend fun getRange(from: Long, to: Long): List<StepBucket>
+
+    @Query("INSERT OR IGNORE INTO steps (hourStart, source, steps) VALUES (:hour, :source, 0)")
+    suspend fun ensure(hour: Long, source: String)
+
+    @Query("UPDATE steps SET steps = steps + :delta WHERE hourStart = :hour AND source = :source")
+    suspend fun add(hour: Long, source: String, delta: Long)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(list: List<StepBucket>)
+
+    @Query("DELETE FROM steps WHERE source = :source AND hourStart >= :from AND hourStart < :to")
+    suspend fun deleteSourceIn(source: String, from: Long, to: Long)
+
+    @Query("SELECT * FROM steps ORDER BY hourStart")
+    suspend fun all(): List<StepBucket>
+
+    @Query("DELETE FROM steps")
     suspend fun deleteAll()
 }
 
@@ -188,8 +216,8 @@ interface ScreenOffDao {
 }
 
 @Database(
-    entities = [Category::class, Place::class, Entry::class, LocationSample::class, ScreenOff::class, Goal::class],
-    version = 2,
+    entities = [Category::class, Place::class, Entry::class, LocationSample::class, ScreenOff::class, Goal::class, StepBucket::class],
+    version = 3,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -199,6 +227,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun locations(): LocationDao
     abstract fun screenOff(): ScreenOffDao
     abstract fun goals(): GoalDao
+    abstract fun steps(): StepDao
 
     companion object {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -213,9 +242,18 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `steps` (`hourStart` INTEGER NOT NULL, `source` TEXT NOT NULL, " +
+                        "`steps` INTEGER NOT NULL, PRIMARY KEY(`hourStart`, `source`))"
+                )
+            }
+        }
+
         fun build(ctx: Context): AppDatabase =
             Room.databaseBuilder(ctx, AppDatabase::class.java, "lifecycle.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
     }
 }

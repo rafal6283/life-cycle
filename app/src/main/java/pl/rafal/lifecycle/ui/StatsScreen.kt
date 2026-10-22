@@ -88,6 +88,32 @@ fun StatsScreen() {
             Insights.compute(e, catMap, places.associateBy { it.id }, System.currentTimeMillis())
         }
     }
+    val stepBuckets by remember(from, to) { LifeApp.instance.db.steps().observeRange(from, to) }
+        .collectAsState(initial = emptyList())
+    val stepStats = remember(stepBuckets, startDay, type) {
+        val perDay = pl.rafal.lifecycle.tracking.Steps.perDay(stepBuckets)
+        val cur = perDay.filterKeys { it >= period.start && it < period.end }
+        if (cur.isEmpty()) null else {
+            val prevD = perDay.filterKeys { it >= prev.start && it < prev.end }
+            val avg = cur.values.sum() / cur.size
+            val prevAvg = if (prevD.isEmpty()) 0L else prevD.values.sum() / prevD.size
+            val bars: List<Long>
+            val labels: List<String>
+            if (type == PeriodType.YEAR) {
+                bars = (1..12).map { m ->
+                    val l = cur.filterKeys { it.monthValue == m }.values
+                    if (l.isEmpty()) 0L else l.sum() / l.size
+                }
+                labels = listOf("S", "L", "M", "K", "M", "C", "L", "S", "W", "P", "L", "G")
+            } else {
+                val days = generateSequence(period.start) { it.plusDays(1) }.takeWhile { it < period.end }.toList()
+                bars = days.map { cur[it] ?: 0L }
+                labels = if (type == PeriodType.WEEK) listOf("Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd")
+                else days.map { it.dayOfMonth.toString() }
+            }
+            listOf(avg, prevAvg, cur.values.sum()) to (bars to labels)
+        }
+    }
     val commute = remember(entries, categories, startDay, type) {
         entries?.let { list ->
             val start = Fmt.dayStart(period.start)
@@ -233,6 +259,17 @@ fun StatsScreen() {
                     item { SectionTitle("Dojazdy · średnio") }
                     item { CommuteCard(c) }
                 }
+            }
+        }
+
+        stepStats?.let { (nums, chart) ->
+            item { SectionTitle("Kroki") }
+            item {
+                StepsStatsCard(
+                    avg = nums[0], prevAvg = nums[1], total = nums[2],
+                    bars = chart.first, labels = chart.second,
+                    avgLabel = if (type == PeriodType.YEAR) "średnio dziennie w roku" else "średnio dziennie",
+                )
             }
         }
 

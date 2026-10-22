@@ -90,6 +90,9 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
     var sleepHc by remember { mutableStateOf(prefs.sleepHc) }
     var sleepAuto by remember { mutableStateOf(prefs.sleepAuto) }
     var workouts by remember { mutableStateOf(prefs.workoutsHc) }
+    var stepsHc by remember { mutableStateOf(prefs.stepsHc) }
+    var stepGoalDialog by remember { mutableStateOf(false) }
+    var stepGoalTick by remember { mutableIntStateOf(0) }
     var weekly by remember { mutableStateOf(prefs.weeklySummary) }
     var backupTree by remember { mutableStateOf(prefs.backupTree) }
     var lastBackup by remember { mutableStateOf(prefs.lastBackupAt) }
@@ -197,6 +200,31 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
             }
         }
 
+        SectionTitle("Kroki")
+        Group {
+            NavRow(
+                "Dzienny cel kroków",
+                remember(stepGoalTick) { Fmt.steps(prefs.stepGoal.toLong()) },
+            ) { stepGoalDialog = true }
+            HorizontalDivider(Modifier.padding(start = 16.dp))
+            SwitchRow("Kroki z Health Connect", "Z zegarka; w każdej godzinie liczy się wyższa wartość z telefonu i zegarka", stepsHc) {
+                stepsHc = it
+                prefs.stepsHc = it
+                if (it) scope.launch {
+                    withContext(Dispatchers.IO) {
+                        try {
+                            pl.rafal.lifecycle.tracking.StepsImporter.run(ctx)
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+            }
+            if (!remember { pl.rafal.lifecycle.tracking.StepSensor.available(ctx) }) {
+                HorizontalDivider(Modifier.padding(start = 16.dp))
+                NavRow("Telefon nie ma licznika kroków", "Kroki będą pobierane tylko z Health Connect") { }
+            }
+        }
+
         SectionTitle("Cele i podsumowania")
         Group {
             NavRow("Cele", "Minimum, limity i „ile razy w tygodniu”") { onOpen("goals") }
@@ -276,6 +304,8 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
             NavRow("Doba", "Wersja ${BuildConfig.VERSION_NAME}") { }
         }
     }
+
+    if (stepGoalDialog) StepGoalDialog { stepGoalDialog = false; stepGoalTick++ }
 
     summaryText?.let { text ->
         AlertDialog(
