@@ -167,6 +167,7 @@ class TrackingEngine(
         }
 
         closeOpen(since)
+        db.entries().closeOverrides(since)
         val catId = place?.categoryId ?: repo.categoryByKind(Kind.UNKNOWN).id
         db.entries().insert(
             Entry(
@@ -181,6 +182,7 @@ class TrackingEngine(
 
     private suspend fun startMove(at: Long, lat: Double, lng: Double) {
         closeOpen(at)
+        db.entries().closeOverrides(at)
         val cat = categoryForMotion()
         db.entries().insert(
             Entry(startAt = at, endAt = null, categoryId = cat.id, lat = lat, lng = lng, source = Source.AUTO_MOVE)
@@ -195,8 +197,25 @@ class TrackingEngine(
         if (open.source == Source.AUTO_MOVE && end - open.startAt < MIN_MOVE_MS) {
             db.entries().delete(open)
         } else {
-            db.entries().update(open.copy(endAt = end))
+            val dist = if (open.source == Source.AUTO_MOVE) routeDistance(open.startAt, end) else null
+            db.entries().update(open.copy(endAt = end, distanceM = dist))
         }
+    }
+
+    /** Dystans trasy z zapisanych punktów GPS (pomija niedokładne odczyty i drgania). */
+    private suspend fun routeDistance(from: Long, to: Long): Double? {
+        val pts = db.locations().range(from, to).filter { it.accuracy <= 100f }
+        if (pts.size < 2) return null
+        var sum = 0.0
+        var prev = pts.first()
+        for (p in pts.drop(1)) {
+            val d = Geo.distance(prev.lat, prev.lng, p.lat, p.lng)
+            if (d >= max(prev.accuracy, p.accuracy) * 0.5) {
+                sum += d
+                prev = p
+            }
+        }
+        return if (sum > 0) sum else null
     }
 
     private suspend fun categoryForMotion(): Category {

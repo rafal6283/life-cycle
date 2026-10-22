@@ -23,6 +23,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import pl.rafal.lifecycle.domain.Goals
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -97,6 +101,17 @@ fun DayScreen() {
     var editing by remember { mutableStateOf<Entry?>(null) }
     var adding by remember { mutableStateOf(false) }
     var drag by remember { mutableStateOf(0f) }
+    var showMap by remember { mutableStateOf(false) }
+    var quick by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val override by repo.override.collectAsState(initial = null)
+    val goals by repo.goals.collectAsState(initial = emptyList())
+    val weekRange = remember(day) { Goals.weekRange(day) }
+    val weekEntries by remember(weekRange) { repo.entriesIn(weekRange.first, weekRange.second) }
+        .collectAsState(initial = emptyList())
+    val goalProgress = remember(goals, weekEntries, now, day) {
+        goals.map { Goals.progress(it, weekEntries, day, now) }
+    }
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -139,6 +154,9 @@ fun DayScreen() {
                     IconButton(onClick = { epochDay += 1 }, enabled = !isToday) {
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Następny dzień")
                     }
+                    IconButton(onClick = { showMap = true }) {
+                        Icon(Icons.Filled.Map, "Trasy dnia")
+                    }
                 }
             }
 
@@ -176,6 +194,30 @@ fun DayScreen() {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    }
+                }
+            }
+
+            if (isToday) {
+                item {
+                    OverrideCard(
+                        entry = override,
+                        cat = override?.let { catMap[it.categoryId] },
+                        now = now,
+                        onSwitch = { quick = true },
+                        onStop = { scope.launch { repo.stopOverride() } },
+                    )
+                }
+            }
+
+            if (goalProgress.isNotEmpty()) {
+                item { SectionTitle(if (isToday) "Cele" else "Cele (stan na ten dzień)") }
+                item {
+                    Column(
+                        Modifier.padding(horizontal = 16.dp).clip(RoundedCornerShape(18.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                    ) {
+                        goalProgress.forEach { p -> GoalRow(p, catMap[p.goal.categoryId]) }
                     }
                 }
             }
@@ -225,6 +267,8 @@ fun DayScreen() {
     }
 
     editing?.let { EntryEditorDialog(entry = it, defaultDay = day, onDismiss = { editing = null }) }
+    if (showMap) DayMapDialog(day) { showMap = false }
+    if (quick) QuickSwitchDialog { quick = false }
     if (adding) EntryEditorDialog(entry = null, defaultDay = day, onDismiss = { adding = false })
 }
 
@@ -289,6 +333,7 @@ private fun SegmentRow(seg: Segment, cat: Category?, place: Place?, ongoing: Boo
             )
             val sub = listOfNotNull(
                 if (place != null) cat?.name else null,
+                seg.entry.distanceM?.let { Fmt.distance(it) },
                 Source.label(seg.entry.source),
                 seg.entry.note,
             ).joinToString(" · ")

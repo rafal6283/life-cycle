@@ -9,6 +9,8 @@ class Repository(val db: AppDatabase) {
     val categories: Flow<List<Category>> = db.categories().observeAll()
     val places: Flow<List<Place>> = db.places().observeAll()
     val unknownStays: Flow<List<Entry>> = db.entries().observeUnknownStays()
+    val goals: Flow<List<Goal>> = db.goals().observeAll()
+    val override: Flow<Entry?> = db.entries().observeOverride()
 
     fun entriesIn(from: Long, to: Long): Flow<List<Entry>> = db.entries().observeRange(from, to)
 
@@ -76,6 +78,23 @@ class Repository(val db: AppDatabase) {
         val unknown = categoryByKind(Kind.UNKNOWN)
         db.entries().moveCategory(c.id, unknown.id)
         db.places().moveCategory(c.id, unknown.id)
+        db.goals().deleteForCategory(c.id)
         db.categories().delete(c)
     }
+
+    suspend fun saveGoal(g: Goal): Long =
+        if (g.id == 0L) db.goals().insert(g) else { db.goals().update(g); g.id }
+
+    suspend fun deleteGoal(g: Goal) = db.goals().delete(g)
+
+    /** „Teraz robię…”: kończy poprzednie nadpisanie i zaczyna nowe. */
+    suspend fun startOverride(categoryId: Long, note: String? = null) {
+        val now = System.currentTimeMillis()
+        db.entries().closeOverrides(now)
+        db.entries().insert(
+            Entry(startAt = now, endAt = null, categoryId = categoryId, source = Source.OVERRIDE, note = note)
+        )
+    }
+
+    suspend fun stopOverride() = db.entries().closeOverrides(System.currentTimeMillis())
 }

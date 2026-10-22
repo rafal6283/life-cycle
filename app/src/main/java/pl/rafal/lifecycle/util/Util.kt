@@ -48,6 +48,9 @@ object Fmt {
         }
     }
 
+    fun distance(m: Double): String =
+        if (m < 1000) "${m.toInt()} m" else String.format(PL, "%.1f km", m / 1000)
+
     fun durationShort(ms: Long): String {
         val m = (ms / 60_000).toInt()
         val h = m / 60
@@ -86,6 +89,34 @@ class Prefs(ctx: Context) {
     var sleepAuto: Boolean
         get() = p.getBoolean("sleepAuto", true)
         set(v) = p.edit().putBoolean("sleepAuto", v).apply()
+
+    var workoutsHc: Boolean
+        get() = p.getBoolean("workoutsHc", true)
+        set(v) = p.edit().putBoolean("workoutsHc", v).apply()
+
+    var weeklySummary: Boolean
+        get() = p.getBoolean("weeklySummary", true)
+        set(v) = p.edit().putBoolean("weeklySummary", v).apply()
+
+    var lastWeekly: Long
+        get() = p.getLong("lastWeekly", 0L)
+        set(v) = p.edit().putLong("lastWeekly", v).apply()
+
+    /** Folder (SAF) na automatyczną kopię zapasową. */
+    var backupTree: String?
+        get() = p.getString("backupTree", null)
+        set(v) = p.edit().putString("backupTree", v).apply()
+
+    var lastBackupDay: Long
+        get() = p.getLong("lastBackupDay", -1L)
+        set(v) = p.edit().putLong("lastBackupDay", v).apply()
+
+    var lastBackupAt: Long
+        get() = p.getLong("lastBackupAt", 0L)
+        set(v) = p.edit().putLong("lastBackupAt", v).apply()
+
+    fun goalNotified(key: String): Boolean = p.getBoolean("gn_$key", false)
+    fun setGoalNotified(key: String) = p.edit().putBoolean("gn_$key", true).apply()
 
     var onboardingDone: Boolean
         get() = p.getBoolean("onboardingDone", false)

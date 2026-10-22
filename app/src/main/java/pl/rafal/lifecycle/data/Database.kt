@@ -9,6 +9,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -36,6 +38,33 @@ interface CategoryDao {
 
     @Delete
     suspend fun delete(c: Category)
+
+    @Query("DELETE FROM categories")
+    suspend fun deleteAll()
+}
+
+@Dao
+interface GoalDao {
+    @Query("SELECT * FROM goals ORDER BY id")
+    fun observeAll(): Flow<List<Goal>>
+
+    @Query("SELECT * FROM goals ORDER BY id")
+    suspend fun getAll(): List<Goal>
+
+    @Query("DELETE FROM goals WHERE categoryId = :cat")
+    suspend fun deleteForCategory(cat: Long)
+
+    @Query("DELETE FROM goals")
+    suspend fun deleteAll()
+
+    @Insert
+    suspend fun insert(g: Goal): Long
+
+    @Update
+    suspend fun update(g: Goal)
+
+    @Delete
+    suspend fun delete(g: Goal)
 }
 
 @Dao
@@ -60,6 +89,9 @@ interface PlaceDao {
 
     @Delete
     suspend fun delete(p: Place)
+
+    @Query("DELETE FROM places")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -103,6 +135,21 @@ interface EntryDao {
     @Query("SELECT * FROM entries ORDER BY startAt")
     suspend fun all(): List<Entry>
 
+    @Query("SELECT * FROM entries WHERE endAt IS NULL AND source = 'OVERRIDE' ORDER BY startAt DESC LIMIT 1")
+    fun observeOverride(): Flow<Entry?>
+
+    @Query("UPDATE entries SET endAt = :at WHERE endAt IS NULL AND source = 'OVERRIDE'")
+    suspend fun closeOverrides(at: Long)
+
+    @Query("SELECT * FROM entries WHERE endAt IS NULL ORDER BY startAt DESC")
+    suspend fun allOpen(): List<Entry>
+
+    @Query("DELETE FROM entries")
+    suspend fun deleteAll()
+
+    @Insert
+    suspend fun insertAll(list: List<Entry>)
+
     @Insert
     suspend fun insert(e: Entry): Long
 
@@ -123,6 +170,9 @@ interface LocationDao {
 
     @Query("DELETE FROM locations WHERE time < :before")
     suspend fun prune(before: Long)
+
+    @Query("SELECT * FROM locations WHERE time >= :from AND time <= :to ORDER BY time")
+    suspend fun range(from: Long, to: Long): List<LocationSample>
 }
 
 @Dao
@@ -138,8 +188,8 @@ interface ScreenOffDao {
 }
 
 @Database(
-    entities = [Category::class, Place::class, Entry::class, LocationSample::class, ScreenOff::class],
-    version = 1,
+    entities = [Category::class, Place::class, Entry::class, LocationSample::class, ScreenOff::class, Goal::class],
+    version = 2,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -148,9 +198,24 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun entries(): EntryDao
     abstract fun locations(): LocationDao
     abstract fun screenOff(): ScreenOffDao
+    abstract fun goals(): GoalDao
 
     companion object {
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE entries ADD COLUMN distanceM REAL")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `goals` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`categoryId` INTEGER NOT NULL, `type` TEXT NOT NULL, `period` TEXT NOT NULL, " +
+                        "`minutes` INTEGER NOT NULL, `count` INTEGER NOT NULL, `notify` INTEGER NOT NULL)"
+                )
+                db.execSQL("UPDATE categories SET kind = 'WORKOUT' WHERE kind = 'CUSTOM' AND icon = 'gym'")
+            }
+        }
+
         fun build(ctx: Context): AppDatabase =
-            Room.databaseBuilder(ctx, AppDatabase::class.java, "lifecycle.db").build()
+            Room.databaseBuilder(ctx, AppDatabase::class.java, "lifecycle.db")
+                .addMigrations(MIGRATION_1_2)
+                .build()
     }
 }

@@ -13,11 +13,12 @@ object Kind {
     const val WALK = "WALK"
     const val RUN = "RUN"
     const val BIKE = "BIKE"
+    const val WORKOUT = "WORKOUT"
     const val UNKNOWN = "UNKNOWN"
     const val CUSTOM = "CUSTOM"
 
     /** Kategorie wymagane przez silnik — nie można ich usunąć. */
-    val required = setOf(SLEEP, TRAVEL, WALK, RUN, BIKE, UNKNOWN)
+    val required = setOf(SLEEP, TRAVEL, WALK, RUN, BIKE, WORKOUT, UNKNOWN)
 }
 
 object Source {
@@ -25,12 +26,17 @@ object Source {
     const val AUTO_MOVE = "AUTO_MOVE"
     const val SLEEP_HC = "SLEEP_HC"
     const val SLEEP_AUTO = "SLEEP_AUTO"
+    const val WORKOUT_HC = "WORKOUT_HC"
     const val MANUAL = "MANUAL"
+    /** „Teraz robię…” — trwa, dopóki użytkownik go nie zakończy albo nie zmieni miejsca. */
+    const val OVERRIDE = "OVERRIDE"
 
     fun label(source: String): String? = when (source) {
         SLEEP_HC -> "Health Connect"
         SLEEP_AUTO -> "sen wykryty automatycznie"
+        WORKOUT_HC -> "trening z Health Connect"
         MANUAL -> "ręcznie"
+        OVERRIDE -> "przełączone ręcznie"
         else -> null
     }
 }
@@ -70,6 +76,8 @@ data class Entry(
     val lng: Double? = null,
     val source: String,
     val note: String? = null,
+    /** Dystans w metrach (przejazdy i treningi). */
+    val distanceM: Double? = null,
 )
 
 @Entity(tableName = "locations", indices = [Index("time")])
@@ -100,7 +108,7 @@ object DefaultCategories {
         c("Chodzenie", 0xFF34C759, "walk", Kind.WALK, 4),
         c("Bieganie", 0xFFFF3B30, "run", Kind.RUN, 5),
         c("Rower", 0xFFFFCC00, "bike", Kind.BIKE, 6),
-        c("Siłownia", 0xFFFF2D55, "gym", Kind.CUSTOM, 7),
+        c("Siłownia", 0xFFFF2D55, "gym", Kind.WORKOUT, 7),
         c("Jedzenie", 0xFFFF6B22, "food", Kind.CUSTOM, 8),
         c("Zakupy", 0xFFBF5AF2, "shop", Kind.CUSTOM, 9),
         c("Znajomi", 0xFFFF8AC4, "friends", Kind.CUSTOM, 10),
@@ -109,3 +117,26 @@ object DefaultCategories {
         c("Nieznane", 0xFFA0A0A8, "unknown", Kind.UNKNOWN, 99),
     )
 }
+
+object GoalType {
+    const val MIN = "MIN"
+    const val MAX = "MAX"
+    /** Liczba dni w tygodniu z co najmniej [Goal.minutes] minut danej kategorii. */
+    const val COUNT = "COUNT"
+}
+
+object GoalPeriod {
+    const val DAY = "DAY"
+    const val WEEK = "WEEK"
+}
+
+@Entity(tableName = "goals")
+data class Goal(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val categoryId: Long,
+    val type: String,
+    val period: String,
+    val minutes: Int,
+    val count: Int,
+    val notify: Boolean,
+)

@@ -47,6 +47,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import pl.rafal.lifecycle.LifeApp
 import pl.rafal.lifecycle.data.Category
+import pl.rafal.lifecycle.domain.Commute
+import pl.rafal.lifecycle.domain.Insights
 import pl.rafal.lifecycle.domain.Period
 import pl.rafal.lifecycle.domain.PeriodType
 import pl.rafal.lifecycle.domain.Stats
@@ -75,6 +77,23 @@ fun StatsScreen() {
         value = withContext(Dispatchers.Default) { Stats.compute(e, period, System.currentTimeMillis()) }
     }
     var selected by remember(type) { mutableStateOf<Long?>(null) }
+
+    val places by repo.places.collectAsState(initial = emptyList())
+    val insightFrom = remember { Fmt.dayStart(LocalDate.now().minusDays(57)) }
+    val insightTo = remember { Fmt.dayStart(LocalDate.now().plusDays(1)) }
+    val insightEntries by remember { repo.entriesIn(insightFrom, insightTo) }.collectAsState(initial = null)
+    val insights by produceState<List<String>>(emptyList(), insightEntries, categories, places) {
+        val e = insightEntries ?: return@produceState
+        value = withContext(Dispatchers.Default) {
+            Insights.compute(e, catMap, places.associateBy { it.id }, System.currentTimeMillis())
+        }
+    }
+    val commute = remember(entries, categories, startDay, type) {
+        entries?.let { list ->
+            val start = Fmt.dayStart(period.start)
+            Commute.compute(list.filter { it.startAt >= start }, catMap)
+        }
+    }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { ScreenHeader("Statystyki") }
@@ -209,7 +228,17 @@ fun StatsScreen() {
                         BarsChart(bars, s.labels)
                     }
                 }
+
+                commute?.let { c ->
+                    item { SectionTitle("Dojazdy · średnio") }
+                    item { CommuteCard(c) }
+                }
             }
+        }
+
+        if (insights.isNotEmpty()) {
+            item { SectionTitle("Ciekawostki · ostatnie 8 tygodni") }
+            item { InsightsCard(insights) }
         }
     }
 }

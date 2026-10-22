@@ -67,7 +67,15 @@ import pl.rafal.lifecycle.BuildConfig
 import pl.rafal.lifecycle.LifeApp
 import pl.rafal.lifecycle.data.Category
 import pl.rafal.lifecycle.data.Kind
+import android.content.Intent
+import android.net.Uri
+import androidx.core.content.FileProvider
+import pl.rafal.lifecycle.domain.Backup
 import pl.rafal.lifecycle.domain.CsvExport
+import pl.rafal.lifecycle.domain.KreskaExport
+import pl.rafal.lifecycle.domain.WeeklySummary
+import pl.rafal.lifecycle.tracking.WorkoutImporter
+import pl.rafal.lifecycle.util.Fmt
 import pl.rafal.lifecycle.tracking.SleepDetector
 import pl.rafal.lifecycle.tracking.TrackingControl
 import pl.rafal.lifecycle.util.Prefs
@@ -81,6 +89,45 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
     var tracking by remember { mutableStateOf(prefs.tracking) }
     var sleepHc by remember { mutableStateOf(prefs.sleepHc) }
     var sleepAuto by remember { mutableStateOf(prefs.sleepAuto) }
+    var workouts by remember { mutableStateOf(prefs.workoutsHc) }
+    var weekly by remember { mutableStateOf(prefs.weeklySummary) }
+    var backupTree by remember { mutableStateOf(prefs.backupTree) }
+    var lastBackup by remember { mutableStateOf(prefs.lastBackupAt) }
+    var summaryText by remember { mutableStateOf<String?>(null) }
+    var confirmRestore by remember { mutableStateOf<Uri?>(null) }
+
+    fun toast(msg: String) = Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
+
+    val treeLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            try {
+                ctx.contentResolver.takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            } catch (_: Exception) {
+            }
+            prefs.backupTree = uri.toString()
+            backupTree = uri.toString()
+            scope.launch {
+                val ok = Backup.autoBackup(ctx, force = true)
+                lastBackup = prefs.lastBackupAt
+                toast(if (ok) "Kopia zapisana w wybranym folderze" else "Nie udało się zapisać kopii w tym folderze")
+            }
+        }
+    }
+    val backupFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) scope.launch {
+            try {
+                Backup.exportTo(ctx, uri)
+                toast("Kopia zapisana")
+            } catch (e: Exception) {
+                toast("Nie udało się zapisać kopii")
+            }
+        }
+    }
+    val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) confirmRestore = uri
+    }
     var tick by remember { mutableIntStateOf(0) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { tick++ }
     val missing = remember(tick) {
@@ -131,6 +178,12 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
                 prefs.sleepAuto = it
             }
             HorizontalDivider(Modifier.padding(start = 16.dp))
+            SwitchRow("Treningi z Health Connect", "Dokładne godziny i dystans z zegarka", workouts) {
+                workouts = it
+                prefs.workoutsHc = it
+                if (it) scope.launch { withContext(Dispatchers.IO) { try { WorkoutImporter.run(ctx) } catch (_: Exception) {} } }
+            }
+            HorizontalDivider(Modifier.padding(start = 16.dp))
             NavRow("Przelicz sen teraz", null) {
                 scope.launch {
                     withContext(Dispatchers.IO) {
@@ -140,6 +193,71 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
                         }
                     }
                     Toast.makeText(ctx, "Sen przeliczony", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        SectionTitle("Cele i podsumowania")
+        Group {
+            NavRow("Cele", "Minimum, limity i „ile razy w tygodniu”") { onOpen("goals") }
+            HorizontalDivider(Modifier.padding(start = 16.dp))
+            SwitchRow("Podsumowanie tygodnia", "Powiadomienie w niedzielę wieczorem", weekly) {
+                weekly = it
+                prefs.weeklySummary = it
+            }
+            HorizontalDivider(Modifier.padding(start = 16.dp))
+            NavRow("Pokaż podsumowanie tego tygodnia", null) {
+                scope.launch { summaryText = WeeklySummary.build(ctx) ?: "Brak danych z tego tygodnia." }
+            }
+        }
+
+        SectionTitle("Kopia zapasowa")
+        Group {
+            NavRow(
+                "Automatyczna kopia codziennie",
+                if (backupTree == null) "Wybierz folder (np. Synology Drive, dysk sieciowy)"
+                else "Ostatnio: " + (if (lastBackup > 0) Fmt.dateTime(lastBackup) else "jeszcze nie") + " · zmień folder",
+            ) { treeLauncher.launch(null) }
+            if (backupTree != null) {
+                HorizontalDivider(Modifier.padding(start = 16.dp))
+                NavRow("Zrób kopię teraz", null) {
+                    scope.launch {
+                        val ok = Backup.autoBackup(ctx, force = true)
+                        lastBackup = prefs.lastBackupAt
+                        toast(if (ok) "Kopia zapisana" else "Nie udało się zapisać kopii")
+                    }
+                }
+                HorizontalDivider(Modifier.padding(start = 16.dp))
+                NavRow("Wyłącz automatyczną kopię", null) {
+                    prefs.backupTree = null
+                    backupTree = null
+                }
+            }
+            HorizontalDivider(Modifier.padding(start = 16.dp))
+            NavRow("Zapisz kopię do pliku", null) {
+                backupFileLauncher.launch("doba-kopia-${LocalDate.now()}.json")
+            }
+            HorizontalDivider(Modifier.padding(start = 16.dp))
+            NavRow("Przywróć z kopii", "Zastępuje wszystkie obecne dane") {
+                restoreLauncher.launch(arrayOf("application/json", "application/octet-stream", "*/*"))
+            }
+        }
+
+        SectionTitle("Inne aplikacje")
+        Group {
+            NavRow("Wyślij do Kreski", "Cała historia w formacie wymiany zdarzeń") {
+                scope.launch {
+                    try {
+                        val file = KreskaExport.buildFile(ctx)
+                        val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".files", file)
+                        val send = Intent(Intent.ACTION_SEND)
+                            .setType("application/json")
+                            .putExtra(Intent.EXTRA_STREAM, uri)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        ctx.startActivity(Intent.createChooser(send, "Wyślij do Kreski"))
+                    } catch (e: Exception) {
+                        toast("Nie udało się przygotować eksportu")
+                    }
                 }
             }
         }
@@ -157,6 +275,30 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
         Group {
             NavRow("Doba", "Wersja ${BuildConfig.VERSION_NAME}") { }
         }
+    }
+
+    summaryText?.let { text ->
+        AlertDialog(
+            onDismissRequest = { summaryText = null },
+            title = { Text("Twój tydzień") },
+            text = { Text(text) },
+            confirmButton = { TextButton(onClick = { summaryText = null }) { Text("OK") } },
+        )
+    }
+
+    confirmRestore?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { confirmRestore = null },
+            title = { Text("Przywrócić kopię?") },
+            text = { Text("Wszystkie obecne wpisy, miejsca, kategorie i cele zostaną zastąpione zawartością pliku.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRestore = null
+                    scope.launch { toast(Backup.importFrom(ctx, uri)) }
+                }) { Text("Przywróć", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmRestore = null }) { Text("Anuluj") } },
+        )
     }
 }
 

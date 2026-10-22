@@ -22,7 +22,8 @@ data class Segment(val entry: Entry, val start: Long, val end: Long) {
 
 object Timeline {
     private fun priority(source: String) = when (source) {
-        Source.MANUAL -> 3
+        Source.MANUAL, Source.OVERRIDE -> 4
+        Source.WORKOUT_HC -> 3
         Source.SLEEP_HC, Source.SLEEP_AUTO -> 2
         else -> 1
     }

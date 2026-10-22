@@ -44,6 +44,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import pl.rafal.lifecycle.LifeApp
 import pl.rafal.lifecycle.R
+import pl.rafal.lifecycle.domain.Backup
+import pl.rafal.lifecycle.domain.GoalChecker
+import pl.rafal.lifecycle.domain.WeeklySummary
+import pl.rafal.lifecycle.widget.DobaWidget
 import pl.rafal.lifecycle.ui.MainActivity
 import pl.rafal.lifecycle.util.Fmt
 import pl.rafal.lifecycle.util.Prefs
@@ -95,8 +99,8 @@ class TrackingService : LifecycleService() {
         }
         lifecycleScope.launch {
             combine(
-                app.db.entries().observeOpenAuto(), app.repo.categories, app.repo.places,
-            ) { e, cats, places -> Triple(e, cats, places) }
+                app.db.entries().observeOpenAuto(), app.repo.override, app.repo.categories, app.repo.places,
+            ) { auto, ov, cats, places -> Triple(ov ?: auto, cats, places) }
                 .collect { (e, cats, places) ->
                     val title: String
                     val text: String?
@@ -110,6 +114,7 @@ class TrackingService : LifecycleService() {
                         text = "od ${Fmt.time(e.startAt)}" + (if (place != null && cat != null) " · ${cat.name}" else "")
                     }
                     Notifications.updateTracking(this@TrackingService, title, text)
+                    DobaWidget.updateAll(this@TrackingService)
                 }
         }
     }
@@ -283,11 +288,18 @@ class BootReceiver : BroadcastReceiver() {
 class WatchdogWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result {
         TrackingControl.startIfAllowed(applicationContext)
-        try {
-            SleepDetector.run(applicationContext)
+        val ctx = applicationContext
+        suspend fun safe(name: String, block: suspend () -> Unit) = try {
+            block()
         } catch (e: Exception) {
-            Log.w(TrackingService.TAG, "Wykrywanie snu nie powiodło się", e)
+            Log.w(TrackingService.TAG, "$name nie powiodło się", e)
         }
+        safe("Wykrywanie snu") { SleepDetector.run(ctx) }
+        safe("Import treningów") { WorkoutImporter.run(ctx) }
+        safe("Sprawdzanie celów") { GoalChecker.run(ctx) }
+        safe("Podsumowanie tygodnia") { WeeklySummary.maybeNotify(ctx) }
+        safe("Kopia zapasowa") { Backup.autoBackup(ctx) }
+        safe("Widżet") { DobaWidget.updateAll(ctx) }
         val db = (applicationContext as LifeApp).db
         val now = System.currentTimeMillis()
         db.locations().prune(now - 90L * 24 * 3_600_000)
@@ -307,6 +319,8 @@ class WatchdogWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
 object Notifications {
     private const val CH_TRACKING = "tracking"
     private const val CH_PLACES = "places"
+    const val CH_GOALS = "goals"
+    const val CH_SUMMARY = "summary"
     const val TRACKING_ID = 1
     private const val PLACE_ID = 2
 
@@ -320,9 +334,29 @@ object Notifications {
         nm.createNotificationChannel(
             NotificationChannel(CH_PLACES, "Nowe miejsca", NotificationManager.IMPORTANCE_DEFAULT)
         )
+        nm.createNotificationChannel(
+            NotificationChannel(CH_GOALS, "Cele", NotificationManager.IMPORTANCE_DEFAULT)
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CH_SUMMARY, "Podsumowanie tygodnia", NotificationManager.IMPORTANCE_DEFAULT)
+        )
     }
 
-    private fun openApp(ctx: Context, tab: String?): PendingIntent {
+    @SuppressLint("MissingPermission")
+    fun simple(ctx: Context, id: Int, channel: String, title: String, text: String, tab: String?) {
+        if (!TrackingControl.hasNotifications(ctx)) return
+        val n = NotificationCompat.Builder(ctx, channel)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setAutoCancel(true)
+            .setContentIntent(openApp(ctx, tab))
+            .build()
+        NotificationManagerCompat.from(ctx).notify(id, n)
+    }
+
+    fun openApp(ctx: Context, tab: String?): PendingIntent {
         val intent = Intent(ctx, MainActivity::class.java)
             .putExtra("tab", tab)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -342,6 +376,7 @@ object Notifications {
             .setSilent(true)
             .setShowWhen(false)
             .setContentIntent(openApp(ctx, null))
+            .addAction(0, "Teraz robię…", openApp(ctx, "quick"))
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 

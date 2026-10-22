@@ -79,6 +79,7 @@ import pl.rafal.lifecycle.tracking.ActivityRecognitionHelper
 import pl.rafal.lifecycle.tracking.HealthConnectHelper
 import pl.rafal.lifecycle.tracking.SleepDetector
 import pl.rafal.lifecycle.tracking.TrackingControl
+import pl.rafal.lifecycle.tracking.WorkoutImporter
 import pl.rafal.lifecycle.util.Prefs
 
 class MainActivity : ComponentActivity() {
@@ -125,10 +126,28 @@ fun AppRoot(startTab: String?) {
                 SleepDetector.run(ctx)
             } catch (_: Exception) {
             }
+            try {
+                WorkoutImporter.run(ctx)
+            } catch (_: Exception) {
+            }
+            try {
+                pl.rafal.lifecycle.widget.DobaWidget.updateAll(ctx)
+            } catch (_: Exception) {
+            }
         }
     }
 
-    var tab by rememberSaveable { mutableStateOf(if (startTab == "places") Tab.PLACES else Tab.DAY) }
+    var tab by rememberSaveable {
+        mutableStateOf(
+            when (startTab) {
+                "places" -> Tab.PLACES
+                "stats" -> Tab.STATS
+                else -> Tab.DAY
+            }
+        )
+    }
+    var quick by rememberSaveable { mutableStateOf(startTab == "quick") }
+    if (quick) QuickSwitchDialog { quick = false }
     var sub by rememberSaveable { mutableStateOf<String?>(null) }
     BackHandler(enabled = sub != null) { sub = null }
     BackHandler(enabled = sub == null && tab != Tab.DAY) { tab = Tab.DAY }
@@ -154,6 +173,7 @@ fun AppRoot(startTab: String?) {
             when {
                 sub == "categories" -> CategoriesScreen(onBack = { sub = null })
                 sub == "permissions" -> PermissionsScreen(onBack = { sub = null })
+                sub == "goals" -> GoalsScreen(onBack = { sub = null })
                 tab == Tab.DAY -> DayScreen()
                 tab == Tab.STATS -> StatsScreen()
                 tab == Tab.PLACES -> PlacesScreen()
@@ -245,9 +265,9 @@ fun PermissionList(modifier: Modifier = Modifier) {
             open(TrackingControl.batteryIntent(ctx))
         }
         PermissionRow(
-            Icons.Filled.Bedtime, "Sen z Health Connect (opcjonalnie)",
+            Icons.Filled.Bedtime, "Sen i treningi z Health Connect (opcjonalnie)",
             when (hcStatus) {
-                HealthConnectClient.SDK_AVAILABLE -> "Czyta sen z zegarka lub innej aplikacji. Bez tego sen wykrywany jest z nocnej przerwy w używaniu telefonu."
+                HealthConnectClient.SDK_AVAILABLE -> "Czyta sen i treningi z zegarka lub innej aplikacji. Bez tego sen wykrywany jest z nocnej przerwy w używaniu telefonu."
                 HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> "Health Connect wymaga aktualizacji."
                 else -> "Health Connect nie jest dostępny na tym telefonie — sen będzie wykrywany automatycznie."
             },

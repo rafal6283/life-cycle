@@ -4,7 +4,10 @@ import android.content.Context
 import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.SleepSessionRecord
+import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import pl.rafal.lifecycle.LifeApp
@@ -19,18 +22,56 @@ import kotlin.math.max
 import kotlin.math.min
 
 object HealthConnectHelper {
-    val PERMISSIONS = setOf(HealthPermission.getReadPermission(SleepSessionRecord::class))
+    val SLEEP_PERMISSIONS = setOf(HealthPermission.getReadPermission(SleepSessionRecord::class))
+    val WORKOUT_PERMISSIONS = setOf(
+        HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+        HealthPermission.getReadPermission(DistanceRecord::class),
+    )
+    val PERMISSIONS = SLEEP_PERMISSIONS + WORKOUT_PERMISSIONS
 
     fun status(ctx: Context): Int = HealthConnectClient.getSdkStatus(ctx)
 
     fun available(ctx: Context) = status(ctx) == HealthConnectClient.SDK_AVAILABLE
 
-    suspend fun hasPermission(ctx: Context): Boolean = try {
-        available(ctx) &&
-            HealthConnectClient.getOrCreate(ctx).permissionController
-                .getGrantedPermissions().containsAll(PERMISSIONS)
+    private suspend fun granted(ctx: Context): Set<String> = try {
+        if (available(ctx)) HealthConnectClient.getOrCreate(ctx).permissionController.getGrantedPermissions()
+        else emptySet()
     } catch (e: Exception) {
-        false
+        emptySet()
+    }
+
+    /** Czy przyznano wszystkie zgody (sen + treningi). */
+    suspend fun hasPermission(ctx: Context): Boolean = granted(ctx).containsAll(PERMISSIONS)
+    suspend fun hasSleep(ctx: Context): Boolean = granted(ctx).containsAll(SLEEP_PERMISSIONS)
+    suspend fun hasWorkouts(ctx: Context): Boolean =
+        granted(ctx).contains(HealthPermission.getReadPermission(ExerciseSessionRecord::class))
+
+    data class Workout(val start: Long, val end: Long, val type: Int, val title: String?, val distanceM: Double?)
+
+    suspend fun readWorkouts(ctx: Context, from: Long, to: Long): List<Workout>? = try {
+        val client = HealthConnectClient.getOrCreate(ctx)
+        val resp = client.readRecords(
+            ReadRecordsRequest(
+                ExerciseSessionRecord::class,
+                TimeRangeFilter.between(Instant.ofEpochMilli(from), Instant.ofEpochMilli(to)),
+            )
+        )
+        resp.records.map { r ->
+            val dist = try {
+                client.aggregate(
+                    AggregateRequest(
+                        setOf(DistanceRecord.DISTANCE_TOTAL),
+                        TimeRangeFilter.between(r.startTime, r.endTime),
+                    )
+                )[DistanceRecord.DISTANCE_TOTAL]?.inMeters
+            } catch (e: Exception) {
+                null
+            }
+            Workout(r.startTime.toEpochMilli(), r.endTime.toEpochMilli(), r.exerciseType, r.title, dist)
+        }
+    } catch (e: Exception) {
+        Log.w(TrackingService.TAG, "Odczyt treningów z Health Connect nie powiódł się", e)
+        null
     }
 
     /** Zwraca sesje snu (start, koniec) albo null przy błędzie. */
@@ -65,7 +106,7 @@ object SleepDetector {
         val from = now - 5 * 24 * H
         val hc = mutableListOf<Pair<Long, Long>>()
 
-        if (prefs.sleepHc && HealthConnectHelper.hasPermission(ctx)) {
+        if (prefs.sleepHc && HealthConnectHelper.hasSleep(ctx)) {
             val sessions = HealthConnectHelper.readSleep(ctx, from, now)
             if (sessions != null) {
                 db.entries().deleteSourceIn(Source.SLEEP_HC, from, now + H)
@@ -111,6 +152,42 @@ object SleepDetector {
                     Entry(startAt = best.first, endAt = best.second, categoryId = sleepCat.id, source = Source.SLEEP_AUTO)
                 )
             }
+        }
+    }
+}
+
+/** Treningi z zegarka (przez Health Connect) jako dokładne wpisy na osi czasu. */
+object WorkoutImporter {
+    private const val DAY = 24 * 3_600_000L
+
+    private fun kindFor(type: Int): String = when (type) {
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL -> Kind.RUN
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING,
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY -> Kind.BIKE
+        ExerciseSessionRecord.EXERCISE_TYPE_WALKING,
+        ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> Kind.WALK
+        else -> Kind.WORKOUT
+    }
+
+    suspend fun run(ctx: Context) {
+        val app = ctx.applicationContext as LifeApp
+        if (!Prefs(ctx).workoutsHc || !HealthConnectHelper.hasWorkouts(ctx)) return
+        val now = System.currentTimeMillis()
+        val from = now - 7 * DAY
+        val list = HealthConnectHelper.readWorkouts(ctx, from, now) ?: return
+        val db = app.db
+        db.entries().deleteSourceIn(Source.WORKOUT_HC, from, now + DAY)
+        for (w in list) {
+            if (w.start < from || w.end <= w.start) continue
+            val cat = app.repo.categoryByKind(kindFor(w.type))
+            db.entries().insert(
+                Entry(
+                    startAt = w.start, endAt = w.end, categoryId = cat.id,
+                    source = Source.WORKOUT_HC, note = w.title?.takeIf { it.isNotBlank() },
+                    distanceM = w.distanceM,
+                )
+            )
         }
     }
 }
