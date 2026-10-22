@@ -47,7 +47,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import pl.rafal.lifecycle.LifeApp
 import pl.rafal.lifecycle.data.Category
-import pl.rafal.lifecycle.domain.Commute
 import pl.rafal.lifecycle.domain.Insights
 import pl.rafal.lifecycle.domain.Period
 import pl.rafal.lifecycle.domain.PeriodType
@@ -135,7 +134,7 @@ fun StatsScreen() {
     val commute = remember(entries, categories, startDay, type) {
         entries?.let { list ->
             val start = Fmt.dayStart(period.start)
-            Commute.compute(list.filter { it.startAt >= start }, catMap)
+            pl.rafal.lifecycle.domain.Commutes.stats(list.filter { it.startAt >= start }, catMap)
         }
     }
 

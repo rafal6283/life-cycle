@@ -173,6 +173,9 @@ fun EntryEditorDialog(entry: Entry?, defaultDay: LocalDate, onDismiss: () -> Uni
                                     )
                                 )
                             } else {
+                                // Dojazd jest wyliczany — w bazie zostaje oryginalna kategoria przejazdu.
+                                val commuteInfo = pl.rafal.lifecycle.domain.Commutes.info(entry.id)
+                                val cid = if (commuteInfo != null && cid == entry.categoryId) commuteInfo.originalCategoryId else cid
                                 val timesChanged = start != entry.startAt || end != entry.endAt
                                 val newSource = if (timesChanged && end != null) Source.MANUAL else entry.source
                                 var updated = entry.copy(

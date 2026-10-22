@@ -50,6 +50,8 @@ data class DonutSlice(
     val value: Float,
     val iconKey: String?,
     val label: String,
+    /** Druga ikona obok pierwszej (np. dojazd: auto + teczka). */
+    val extraIcon: String? = null,
 )
 
 private data class SliceGeo(val slice: DonutSlice, val start: Float, val sweep: Float)
@@ -184,9 +186,13 @@ fun AnimatedDonut(
                 val showText = g.sweep >= 20f
                 val text = if (showText) measurer.measure(g.slice.label, labelStyle) else null
                 val totalH = iconSize + (text?.size?.height ?: 0)
-                val painter = g.slice.iconKey?.let { painters[it] }
-                if (painter != null) {
-                    translate(px - iconSize / 2, py - totalH / 2) {
+                val icons = listOfNotNull(
+                    g.slice.iconKey?.let { painters[it] },
+                    g.slice.extraIcon?.let { painters[it] }?.takeIf { g.sweep >= 14f },
+                )
+                val rowW = iconSize * icons.size + 2.dp.toPx() * (icons.size - 1).coerceAtLeast(0)
+                icons.forEachIndexed { k, painter ->
+                    translate(px - rowW / 2 + k * (iconSize + 2.dp.toPx()), py - totalH / 2) {
                         with(painter) {
                             draw(Size(iconSize, iconSize), alpha = alpha, colorFilter = ColorFilter.tint(Color.White))
                         }

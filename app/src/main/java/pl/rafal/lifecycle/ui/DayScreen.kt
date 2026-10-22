@@ -363,6 +363,9 @@ private fun SegmentRow(seg: Segment, cat: Category?, place: Place?, ongoing: Boo
             )
             val sub = listOfNotNull(
                 if (place != null) cat?.name else null,
+                pl.rafal.lifecycle.domain.Commutes.info(seg.entry.id)?.let { inf ->
+                    (if (inf.toWork) "do pracy" else "do domu")
+                },
                 seg.entry.distanceM?.let { Fmt.distance(it) },
                 Source.label(seg.entry.source),
                 seg.entry.note,
@@ -424,8 +427,18 @@ private fun mergeSlices(segments: List<Segment>, catMap: Map<Long, Category>): L
     }
     return out.map { a ->
         val c = catMap[a.catId]
+        var icon = c?.icon
+        var extra: String? = null
+        if (c?.kind == pl.rafal.lifecycle.data.Kind.COMMUTE) {
+            val seg = segments.firstOrNull { it.start >= a.start && it.entry.categoryId == a.catId }
+            val info = seg?.let { pl.rafal.lifecycle.domain.Commutes.info(it.entry.id) }
+            if (info != null) {
+                icon = info.mainMotionCat?.let { catMap[it]?.icon } ?: "car"
+                extra = if (info.toWork) "work" else "home"
+            }
+        }
         DaySlice(
-            DonutSlice(a.start, catColor(c), (a.end - a.start).toFloat(), c?.icon, Fmt.durationShort(a.end - a.start)),
+            DonutSlice(a.start, catColor(c), (a.end - a.start).toFloat(), icon, Fmt.durationShort(a.end - a.start), extra),
             a.catId, a.start, a.end, a.places,
         )
     }

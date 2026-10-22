@@ -117,6 +117,10 @@ class Prefs(ctx: Context) {
         get() = p.getLong("lastBackupAt", 0L)
         set(v) = p.edit().putLong("lastBackupAt", v).apply()
 
+    var commutes: Boolean
+        get() = p.getBoolean("commutes", true)
+        set(v) = p.edit().putBoolean("commutes", v).apply()
+
     var stepsHc: Boolean
         get() = p.getBoolean("stepsHc", true)
         set(v) = p.edit().putBoolean("stepsHc", v).apply()

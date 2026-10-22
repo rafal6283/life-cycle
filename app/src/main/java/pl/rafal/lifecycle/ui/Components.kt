@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Commute
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Flight
@@ -147,6 +148,7 @@ object CatIcons {
         "hair" to Icons.Filled.ContentCut,
         "church" to Icons.Filled.Church,
         "moon" to Icons.Filled.DarkMode,
+        "commute" to Icons.Filled.Commute,
         "heart" to Icons.Filled.Favorite,
         "bar" to Icons.Filled.LocalBar,
         "bag" to Icons.Filled.ShoppingBag,

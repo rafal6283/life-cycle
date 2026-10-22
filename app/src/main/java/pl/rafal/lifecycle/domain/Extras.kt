@@ -97,7 +97,7 @@ object GoalChecker {
         val now = System.currentTimeMillis()
         val today = LocalDate.now()
         val (from, to) = Goals.weekRange(today)
-        val entries = app.db.entries().getRange(from, to)
+        val entries = app.repo.getRange(from, to)
         val cats = app.db.categories().getAll().associateBy { it.id }
         val hour = LocalDateTime.now().hour
         val weekKey = today.with(DayOfWeek.MONDAY).toEpochDay()
@@ -188,7 +188,7 @@ object WeeklySummary {
         val period = Period.current(PeriodType.WEEK)
         val from = Fmt.dayStart(period.prev().start)
         val to = Fmt.dayStart(period.end)
-        val entries = app.db.entries().getRange(from, to)
+        val entries = app.repo.getRange(from, to)
         if (entries.isEmpty()) return null
         val cats = app.db.categories().getAll().associateBy { it.id }
         val s = Stats.compute(entries, period, System.currentTimeMillis())
@@ -353,42 +353,6 @@ data class CommuteStats(
     val toWorkAvg: Long?, val toWorkN: Int, val toWorkDist: Double?,
     val toHomeAvg: Long?, val toHomeN: Int, val toHomeDist: Double?,
 )
-
-object Commute {
-    fun compute(entries: List<Entry>, cats: Map<Long, Category>): CommuteStats? {
-        val home = cats.values.firstOrNull { it.kind == Kind.HOME }?.id ?: return null
-        val work = cats.values.firstOrNull { it.kind == Kind.WORK }?.id ?: return null
-        val auto = entries.filter { it.source == Source.AUTO_STAY || it.source == Source.AUTO_MOVE }.sortedBy { it.startAt }
-        val toWork = mutableListOf<Pair<Long, Double?>>()
-        val toHome = mutableListOf<Pair<Long, Double?>>()
-        var lastStay: Entry? = null
-        var dist = 0.0
-        var hasDist = false
-        for (e in auto) {
-            if (e.source == Source.AUTO_MOVE) {
-                e.distanceM?.let { dist += it; hasDist = true }
-                continue
-            }
-            val prev = lastStay
-            val prevEnd = prev?.endAt
-            if (prev != null && prevEnd != null) {
-                val d = e.startAt - prevEnd
-                if (d in 60_000L..3 * 3_600_000L) {
-                    val pair = d to (if (hasDist) dist else null)
-                    if (prev.categoryId == home && e.categoryId == work) toWork += pair
-                    if (prev.categoryId == work && e.categoryId == home) toHome += pair
-                }
-            }
-            lastStay = e
-            dist = 0.0
-            hasDist = false
-        }
-        if (toWork.isEmpty() && toHome.isEmpty()) return null
-        fun avg(l: List<Pair<Long, Double?>>) = if (l.isEmpty()) null else l.sumOf { it.first } / l.size
-        fun avgD(l: List<Pair<Long, Double?>>) = l.mapNotNull { it.second }.takeIf { it.isNotEmpty() }?.average()
-        return CommuteStats(avg(toWork), toWork.size, avgD(toWork), avg(toHome), toHome.size, avgD(toHome))
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Kopia zapasowa
@@ -574,7 +538,7 @@ object KreskaExport {
         val db = LifeApp.instance.db
         val cats = db.categories().getAll().associateBy { it.id }
         val places = db.places().getAll().associateBy { it.id }
-        val entries = db.entries().all()
+        val entries = LifeApp.instance.repo.allWithCommutes()
         val now = System.currentTimeMillis()
         val events = JSONArray()
         val windows = JSONArray()

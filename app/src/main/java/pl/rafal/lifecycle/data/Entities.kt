@@ -14,11 +14,12 @@ object Kind {
     const val RUN = "RUN"
     const val BIKE = "BIKE"
     const val WORKOUT = "WORKOUT"
+    const val COMMUTE = "COMMUTE"
     const val UNKNOWN = "UNKNOWN"
     const val CUSTOM = "CUSTOM"
 
     /** Kategorie wymagane przez silnik — nie można ich usunąć. */
-    val required = setOf(SLEEP, TRAVEL, WALK, RUN, BIKE, WORKOUT, UNKNOWN)
+    val required = setOf(SLEEP, TRAVEL, WALK, RUN, BIKE, WORKOUT, COMMUTE, UNKNOWN)
 }
 
 object Source {
@@ -114,6 +115,7 @@ object DefaultCategories {
         c("Znajomi", 0xFFFF8AC4, "friends", Kind.CUSTOM, 10),
         c("Rozrywka", 0xFF8E44AD, "fun", Kind.CUSTOM, 11),
         c("Nauka", 0xFF007AFF, "study", Kind.CUSTOM, 12),
+        c("Dojazd", 0xFF7A8794, "commute", Kind.COMMUTE, 13),
         c("Nieznane", 0xFFA0A0A8, "unknown", Kind.UNKNOWN, 99),
     )
 }

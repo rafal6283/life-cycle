@@ -38,7 +38,10 @@ class LifeApp : Application() {
             osmdroidTileCache = File(cacheDir, "osmdroid/tiles")
         }
 
-        appScope.launch { repo.ensureDefaults() }
+        appScope.launch {
+            repo.ensureDefaults()
+            repo.categoryByKind(pl.rafal.lifecycle.data.Kind.COMMUTE)
+        }
         WatchdogWorker.schedule(this)
     }
 

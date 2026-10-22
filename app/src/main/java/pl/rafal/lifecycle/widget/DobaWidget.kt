@@ -48,7 +48,7 @@ class DobaWidget : AppWidgetProvider() {
             val today = LocalDate.now()
             val from = Fmt.dayStart(today)
             val to = Fmt.dayStart(today.plusDays(1))
-            val entries = app.db.entries().getRange(from, to)
+            val entries = app.repo.getRange(from, to)
             val cats = app.db.categories().getAll().associateBy { it.id }
             val places = app.db.places().getAll().associateBy { it.id }
             val segs = Timeline.resolve(entries, from, to, now)

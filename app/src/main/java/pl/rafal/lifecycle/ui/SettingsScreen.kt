@@ -91,6 +91,7 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
     var sleepAuto by remember { mutableStateOf(prefs.sleepAuto) }
     var workouts by remember { mutableStateOf(prefs.workoutsHc) }
     var stepsHc by remember { mutableStateOf(prefs.stepsHc) }
+    var commutes by remember { mutableStateOf(prefs.commutes) }
     var stepGoalDialog by remember { mutableStateOf(false) }
     var stepGoalTick by remember { mutableIntStateOf(0) }
     var weekly by remember { mutableStateOf(prefs.weeklySummary) }
@@ -197,6 +198,18 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
                     }
                     Toast.makeText(ctx, "Sen przeliczony", Toast.LENGTH_SHORT).show()
                 }
+            }
+        }
+
+        SectionTitle("Dojazdy")
+        Group {
+            SwitchRow(
+                "Rozpoznawaj dojazdy",
+                "Przejazdy Dom ↔ Praca (z przystankami do 20 min) jako kategoria „Dojazd”",
+                commutes,
+            ) {
+                commutes = it
+                prefs.commutes = it
             }
         }
 

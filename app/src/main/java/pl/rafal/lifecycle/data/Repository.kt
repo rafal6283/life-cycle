@@ -1,6 +1,8 @@
 package pl.rafal.lifecycle.data
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import pl.rafal.lifecycle.domain.Commutes
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import pl.rafal.lifecycle.util.Geo
@@ -12,9 +14,23 @@ class Repository(val db: AppDatabase) {
     val goals: Flow<List<Goal>> = db.goals().observeAll()
     val override: Flow<Entry?> = db.entries().observeOverride()
 
-    fun entriesIn(from: Long, to: Long): Flow<List<Entry>> = db.entries().observeRange(from, to)
+    /** Wpisy z zakresu z rozpoznanymi dojazdami (zakres poszerzony, by złapać dom/pracę na brzegach). */
+    fun entriesIn(from: Long, to: Long): Flow<List<Entry>> =
+        combine(db.entries().observeRange(from - MARGIN, to + MARGIN), categories) { e, c ->
+            Commutes.apply(e, c).filter { it.startAt < to && (it.endAt ?: Long.MAX_VALUE) > from }
+        }
+
+    suspend fun getRange(from: Long, to: Long): List<Entry> =
+        Commutes.apply(db.entries().getRange(from - MARGIN, to + MARGIN), db.categories().getAll())
+            .filter { it.startAt < to && (it.endAt ?: Long.MAX_VALUE) > from }
+
+    suspend fun allWithCommutes(): List<Entry> = Commutes.apply(db.entries().all(), db.categories().getAll())
 
     private val defaultsLock = Mutex()
+
+    companion object {
+        private const val MARGIN = 4 * 3_600_000L
+    }
 
     suspend fun ensureDefaults() = defaultsLock.withLock {
         if (db.categories().count() == 0) {
