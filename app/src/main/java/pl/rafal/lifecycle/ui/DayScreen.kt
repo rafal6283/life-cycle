@@ -1,0 +1,332 @@
+package pl.rafal.lifecycle.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import pl.rafal.lifecycle.LifeApp
+import pl.rafal.lifecycle.data.Category
+import pl.rafal.lifecycle.data.Entry
+import pl.rafal.lifecycle.data.Place
+import pl.rafal.lifecycle.data.Source
+import pl.rafal.lifecycle.domain.Segment
+import pl.rafal.lifecycle.domain.Timeline
+import pl.rafal.lifecycle.util.Fmt
+import java.time.LocalDate
+
+private sealed interface TimelineRow {
+    data class Seg(val s: Segment) : TimelineRow
+    data class Gap(val start: Long, val end: Long) : TimelineRow
+}
+
+@Composable
+fun DayScreen() {
+    val repo = LifeApp.instance.repo
+    var epochDay by rememberSaveable { mutableLongStateOf(LocalDate.now().toEpochDay()) }
+    val day = LocalDate.ofEpochDay(epochDay)
+    val today = LocalDate.now()
+    val isToday = day == today
+    val from = Fmt.dayStart(day)
+    val to = Fmt.dayStart(day.plusDays(1))
+
+    val entries by remember(from, to) { repo.entriesIn(from, to) }.collectAsState(initial = emptyList())
+    val categories by repo.categories.collectAsState(initial = emptyList())
+    val places by repo.places.collectAsState(initial = emptyList())
+    val now by rememberNow()
+
+    val catMap = remember(categories) { categories.associateBy { it.id } }
+    val placeMap = remember(places) { places.associateBy { it.id } }
+    val segments = remember(entries, now, from) { Timeline.resolve(entries, from, to, now) }
+    val totals = remember(segments) { Timeline.totals(segments).toList().sortedByDescending { it.second } }
+    val tracked = totals.sumOf { it.second }
+
+    val rows = remember(segments) {
+        val out = mutableListOf<TimelineRow>()
+        var prevEnd: Long? = null
+        for (s in segments) {
+            val pe = prevEnd
+            if (pe != null && s.start - pe >= 10 * 60_000L) out += TimelineRow.Gap(pe, s.start)
+            out += TimelineRow.Seg(s)
+            prevEnd = s.end
+        }
+        out
+    }
+
+    var clockMode by rememberSaveable { mutableStateOf(true) }
+    var editing by remember { mutableStateOf<Entry?>(null) }
+    var adding by remember { mutableStateOf(false) }
+    var drag by remember { mutableStateOf(0f) }
+
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            Modifier.fillMaxSize().pointerInput(epochDay) {
+                detectHorizontalDragGestures(
+                    onDragStart = { drag = 0f },
+                    onDragEnd = {
+                        if (drag > 160f) epochDay -= 1
+                        else if (drag < -160f && epochDay < today.toEpochDay()) epochDay += 1
+                        drag = 0f
+                    },
+                    onHorizontalDrag = { _, dx -> drag += dx },
+                )
+            },
+            contentPadding = PaddingValues(bottom = 96.dp),
+        ) {
+            item {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = { epochDay -= 1 }) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Poprzedni dzień")
+                    }
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            Fmt.dayTitle(day),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        if (!isToday) {
+                            Text(
+                                "Wróć do dziś",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.clickable { epochDay = today.toEpochDay() },
+                            )
+                        }
+                    }
+                    IconButton(onClick = { epochDay += 1 }, enabled = !isToday) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Następny dzień")
+                    }
+                }
+            }
+
+            item {
+                Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier.size(280.dp).clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { clockMode = !clockMode },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (clockMode) {
+                            ClockRing(
+                                arcs = segments.map { RingArc(catColor(catMap[it.entry.categoryId]), it.start - from, it.end - from) },
+                                dayLength = to - from,
+                                now = if (isToday) now - from else null,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        } else {
+                            ProportionRing(
+                                totals.map { catColor(catMap[it.first]) to it.second.toFloat() },
+                                Modifier.fillMaxSize(),
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                if (tracked > 0) Fmt.durationShort(tracked) else "—",
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                if (clockMode) "śledzono · dotknij" else "proporcje · dotknij",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (totals.isEmpty()) {
+                item {
+                    Text(
+                        if (isToday) "Jeszcze brak danych na dziś. Śledzenie zapisze pierwsze miejsce po kilku minutach pobytu."
+                        else "Brak danych z tego dnia.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                    )
+                }
+            } else {
+                item { SectionTitle("Podsumowanie") }
+                item {
+                    Column(
+                        Modifier.padding(horizontal = 16.dp).clip(RoundedCornerShape(18.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                    ) {
+                        totals.forEach { (catId, ms) ->
+                            SummaryRow(catMap[catId], ms, tracked)
+                        }
+                    }
+                }
+                item { SectionTitle("Oś czasu") }
+                items(rows) { row ->
+                    when (row) {
+                        is TimelineRow.Gap -> GapRow(row.start, row.end)
+                        is TimelineRow.Seg -> SegmentRow(
+                            row.s, catMap[row.s.entry.categoryId],
+                            row.s.entry.placeId?.let { placeMap[it] },
+                            ongoing = row.s.entry.endAt == null && isToday && now - row.s.end < 60_000,
+                        ) { editing = row.s.entry }
+                    }
+                }
+            }
+        }
+
+        FloatingActionButton(
+            onClick = { adding = true },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+            containerColor = MaterialTheme.colorScheme.primary,
+        ) { Icon(Icons.Filled.Add, "Dodaj wpis", tint = Color.White) }
+    }
+
+    editing?.let { EntryEditorDialog(entry = it, defaultDay = day, onDismiss = { editing = null }) }
+    if (adding) EntryEditorDialog(entry = null, defaultDay = day, onDismiss = { adding = false })
+}
+
+@Composable
+private fun SummaryRow(cat: Category?, ms: Long, total: Long) {
+    val frac = if (total > 0) ms.toFloat() / total else 0f
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CategoryBadge(cat, 34.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(cat?.name ?: "—", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Text(Fmt.duration(ms), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(5.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ShareBar(frac, catColor(cat), Modifier.weight(1f))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "${(frac * 100).toInt()}%",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.width(34.dp),
+                    textAlign = TextAlign.End,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SegmentRow(seg: Segment, cat: Category?, place: Place?, ongoing: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.width(52.dp), horizontalAlignment = Alignment.End) {
+            Text(Fmt.time(seg.start), style = MaterialTheme.typography.labelLarge)
+            Text(
+                if (ongoing) "teraz" else Fmt.time(seg.end),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        Box(
+            Modifier.width(5.dp).height(52.dp).clip(RoundedCornerShape(3.dp)).background(catColor(cat))
+        )
+        Spacer(Modifier.width(10.dp))
+        CategoryBadge(cat, 32.dp)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                place?.name ?: cat?.name ?: "—",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            val sub = listOfNotNull(
+                if (place != null) cat?.name else null,
+                Source.label(seg.entry.source),
+                seg.entry.note,
+            ).joinToString(" · ")
+            if (sub.isNotEmpty()) {
+                Text(
+                    sub,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Text(
+            Fmt.duration(seg.duration),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun GapRow(start: Long, end: Long) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Start,
+    ) {
+        Spacer(Modifier.width(62.dp))
+        Box(
+            Modifier.width(5.dp).height(22.dp).clip(RoundedCornerShape(3.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            "Brak danych · ${Fmt.duration(end - start)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
