@@ -65,7 +65,7 @@ fun AnimatedDonut(
     onSelect: (Any?) -> Unit,
     animKey: Any,
     modifier: Modifier = Modifier,
-    center: @Composable () -> Unit,
+    centerContent: @Composable () -> Unit,
 ) {
     val progress = remember(animKey) { Animatable(0f) }
     LaunchedEffect(animKey) {
@@ -205,6 +205,6 @@ fun AnimatedDonut(
             targetState = selected,
             transitionSpec = { (fadeIn(tween(220)) + scaleIn(initialScale = 0.9f)) togetherWith fadeOut(tween(150)) },
             label = "center",
-        ) { _ -> center() }
+        ) { _ -> centerContent() }
     }
 }
