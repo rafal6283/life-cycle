@@ -92,6 +92,7 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
     var workouts by remember { mutableStateOf(prefs.workoutsHc) }
     var stepsHc by remember { mutableStateOf(prefs.stepsHc) }
     var commutes by remember { mutableStateOf(prefs.commutes) }
+    var hcCheck by remember { mutableStateOf(false) }
     var stepGoalDialog by remember { mutableStateOf(false) }
     var stepGoalTick by remember { mutableIntStateOf(0) }
     var weekly by remember { mutableStateOf(prefs.weeklySummary) }
@@ -187,6 +188,8 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
                 prefs.workoutsHc = it
                 if (it) scope.launch { withContext(Dispatchers.IO) { try { WorkoutImporter.run(ctx) } catch (_: Exception) {} } }
             }
+            HorizontalDivider(Modifier.padding(start = 16.dp))
+            NavRow("Sprawdź Health Connect", "Zgody i treningi widoczne dla Doby, import ręczny") { hcCheck = true }
             HorizontalDivider(Modifier.padding(start = 16.dp))
             NavRow("Przelicz sen teraz", null) {
                 scope.launch {
@@ -318,6 +321,7 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
         }
     }
 
+    if (hcCheck) HealthConnectCheckDialog { hcCheck = false }
     if (stepGoalDialog) StepGoalDialog { stepGoalDialog = false; stepGoalTick++ }
 
     summaryText?.let { text ->

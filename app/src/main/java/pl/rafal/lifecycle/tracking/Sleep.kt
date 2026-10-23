@@ -28,8 +28,16 @@ object HealthConnectHelper {
         HealthPermission.getReadPermission(ExerciseSessionRecord::class),
         HealthPermission.getReadPermission(DistanceRecord::class),
     )
+    /** Pozwala czytać dane, gdy Doba działa w tle (Android 14+). */
+    const val BACKGROUND_READ = "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"
+
     val PERMISSIONS = SLEEP_PERMISSIONS + WORKOUT_PERMISSIONS +
-        setOf(HealthPermission.getReadPermission(StepsRecord::class))
+        setOf(HealthPermission.getReadPermission(StepsRecord::class)) + BACKGROUND_READ
+
+    /** Wszystkie zgody poza odczytem w tle (nie każdy telefon go obsługuje). */
+    val CORE_PERMISSIONS = PERMISSIONS - BACKGROUND_READ
+
+    suspend fun grantedSet(ctx: Context): Set<String> = granted(ctx)
 
     fun status(ctx: Context): Int = HealthConnectClient.getSdkStatus(ctx)
 
@@ -43,12 +51,15 @@ object HealthConnectHelper {
     }
 
     /** Czy przyznano wszystkie zgody (sen + treningi). */
-    suspend fun hasPermission(ctx: Context): Boolean = granted(ctx).containsAll(PERMISSIONS)
+    suspend fun hasPermission(ctx: Context): Boolean = granted(ctx).containsAll(CORE_PERMISSIONS)
     suspend fun hasSleep(ctx: Context): Boolean = granted(ctx).containsAll(SLEEP_PERMISSIONS)
     suspend fun hasWorkouts(ctx: Context): Boolean =
         granted(ctx).contains(HealthPermission.getReadPermission(ExerciseSessionRecord::class))
 
-    data class Workout(val start: Long, val end: Long, val type: Int, val title: String?, val distanceM: Double?)
+    data class Workout(
+        val start: Long, val end: Long, val type: Int, val title: String?, val distanceM: Double?,
+        val app: String = "",
+    )
 
     suspend fun readWorkouts(ctx: Context, from: Long, to: Long): List<Workout>? = try {
         val client = HealthConnectClient.getOrCreate(ctx)
@@ -69,7 +80,10 @@ object HealthConnectHelper {
             } catch (e: Exception) {
                 null
             }
-            Workout(r.startTime.toEpochMilli(), r.endTime.toEpochMilli(), r.exerciseType, r.title, dist)
+            Workout(
+                r.startTime.toEpochMilli(), r.endTime.toEpochMilli(), r.exerciseType, r.title, dist,
+                r.metadata.dataOrigin.packageName,
+            )
         }
     } catch (e: Exception) {
         Log.w(TrackingService.TAG, "Odczyt treningów z Health Connect nie powiódł się", e)
@@ -176,7 +190,7 @@ object WorkoutImporter {
         val app = ctx.applicationContext as LifeApp
         if (!Prefs(ctx).workoutsHc || !HealthConnectHelper.hasWorkouts(ctx)) return
         val now = System.currentTimeMillis()
-        val from = now - 7 * DAY
+        val from = now - 30 * DAY
         val list = HealthConnectHelper.readWorkouts(ctx, from, now) ?: return
         val db = app.db
         db.entries().deleteSourceIn(Source.WORKOUT_HC, from, now + DAY)

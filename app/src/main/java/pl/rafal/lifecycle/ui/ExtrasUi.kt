@@ -749,3 +749,90 @@ private fun StepBars(bars: List<Long>, labels: List<String>) {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Diagnostyka Health Connect
+// ---------------------------------------------------------------------------
+
+private fun appLabel(ctx: android.content.Context, pkg: String): String = try {
+    val pm = ctx.packageManager
+    pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+} catch (e: Exception) {
+    pkg
+}
+
+@Composable
+fun HealthConnectCheckDialog(onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var refresh by remember { mutableStateOf(0) }
+    val state by produceState<Pair<String, List<String>>?>(null, refresh) {
+        val hc = pl.rafal.lifecycle.tracking.HealthConnectHelper
+        value = when {
+            !hc.available(ctx) -> "Health Connect nie jest dostępny na tym telefonie." to emptyList()
+            else -> {
+                val g = hc.grantedSet(ctx)
+                val lines = mutableListOf<String>()
+                fun p(name: String, perm: String) = lines.add((if (perm in g) "✓ " else "✗ ") + name)
+                hc.SLEEP_PERMISSIONS.forEach { p("Sen", it) }
+                p("Treningi", androidx.health.connect.client.permission.HealthPermission.getReadPermission(
+                    androidx.health.connect.client.records.ExerciseSessionRecord::class))
+                p("Kroki", pl.rafal.lifecycle.tracking.StepsImporter.PERMISSION)
+                p("Odczyt w tle", hc.BACKGROUND_READ)
+                val now = System.currentTimeMillis()
+                val list = hc.readWorkouts(ctx, now - 14L * 24 * 3_600_000, now)
+                val header = lines.joinToString("\n")
+                val items = when {
+                    list == null -> listOf("Nie udało się odczytać treningów (brak zgody?).")
+                    list.isEmpty() -> listOf(
+                        "Brak treningów w Health Connect z ostatnich 14 dni. " +
+                            "Aplikacja sportowa nie zapisuje ich do Health Connect — sprawdź jej ustawienia integracji."
+                    )
+                    else -> list.sortedByDescending { it.start }.map { w ->
+                        "${Fmt.dateTime(w.start)} · ${Fmt.duration(w.end - w.start)} · " +
+                            (w.title?.takeIf { it.isNotBlank() } ?: "trening") + "\nz: ${appLabel(ctx, w.app)}"
+                    }
+                }
+                header to items
+            }
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Health Connect") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                val s = state
+                if (s == null) {
+                    Text("Sprawdzam…")
+                } else {
+                    Text(s.first, style = MaterialTheme.typography.bodyMedium)
+                    if (s.second.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        Text("Treningi (14 dni):", fontWeight = FontWeight.SemiBold)
+                        s.second.forEach {
+                            Spacer(Modifier.height(6.dp))
+                            Text(it, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                scope.launch {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        try {
+                            pl.rafal.lifecycle.tracking.WorkoutImporter.run(ctx)
+                            pl.rafal.lifecycle.tracking.StepsImporter.run(ctx)
+                        } catch (_: Exception) {
+                        }
+                    }
+                    refresh++
+                    android.widget.Toast.makeText(ctx, "Zaimportowano", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }) { Text("Importuj teraz") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Zamknij") } },
+    )
+}
