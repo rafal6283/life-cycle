@@ -186,7 +186,7 @@ fun AppRoot(startTab: String?) {
     }
     var quick by rememberSaveable { mutableStateOf(startTab == "quick") }
     if (quick) QuickSwitchDialog { quick = false }
-    var sub by rememberSaveable { mutableStateOf<String?>(null) }
+    var sub by rememberSaveable { mutableStateOf<String?>(startTab?.takeIf { it.startsWith("summary") }) }
     BackHandler(enabled = sub != null) { sub = null }
     BackHandler(enabled = sub == null && tab != Tab.DAY) { tab = Tab.DAY }
 
@@ -212,8 +212,9 @@ fun AppRoot(startTab: String?) {
                 sub == "categories" -> CategoriesScreen(onBack = { sub = null })
                 sub == "permissions" -> PermissionsScreen(onBack = { sub = null })
                 sub == "goals" -> GoalsScreen(onBack = { sub = null })
+                sub?.startsWith("summary") == true -> SummaryScreen(sub) { sub = null }
                 tab == Tab.DAY -> DayScreen { tab = Tab.HEALTH }
-                tab == Tab.STATS -> StatsScreen()
+                tab == Tab.STATS -> StatsScreen(onSummary = { sub = it }, onHealth = { tab = Tab.HEALTH })
                 tab == Tab.PLACES -> PlacesScreen()
                 tab == Tab.HEALTH -> HealthScreen()
                 else -> SettingsScreen(onOpen = { sub = it })

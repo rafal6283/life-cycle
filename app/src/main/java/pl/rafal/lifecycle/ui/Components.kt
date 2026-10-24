@@ -32,6 +32,9 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Air
+import androidx.compose.material.icons.filled.DonutLarge
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Commute
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.MonitorWeight
@@ -164,6 +167,9 @@ object CatIcons {
         "weight" to Icons.Filled.MonitorWeight,
         "lungs" to Icons.Filled.Air,
         "air" to Icons.Filled.Air,
+        "donut" to Icons.Filled.DonutLarge,
+        "bulb" to Icons.Filled.Lightbulb,
+        "place" to Icons.Filled.Place,
         "temp" to Icons.Filled.Thermostat,
         "drop" to Icons.Filled.WaterDrop,
         "fire" to Icons.Filled.LocalFireDepartment,

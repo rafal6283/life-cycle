@@ -100,6 +100,14 @@ class Prefs(ctx: Context) {
         get() = p.getBoolean("weeklySummary", true)
         set(v) = p.edit().putBoolean("weeklySummary", v).apply()
 
+    var monthlySummary: Boolean
+        get() = p.getBoolean("monthlySummary", true)
+        set(v) = p.edit().putBoolean("monthlySummary", v).apply()
+
+    var yearlySummary: Boolean
+        get() = p.getBoolean("yearlySummary", true)
+        set(v) = p.edit().putBoolean("yearlySummary", v).apply()
+
     var lastWeekly: Long
         get() = p.getLong("lastWeekly", 0L)
         set(v) = p.edit().putLong("lastWeekly", v).apply()

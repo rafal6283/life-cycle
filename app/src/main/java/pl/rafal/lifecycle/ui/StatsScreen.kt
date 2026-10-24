@@ -57,7 +57,7 @@ import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StatsScreen() {
+fun StatsScreen(onSummary: (String) -> Unit = {}, onHealth: () -> Unit = {}) {
     val repo = LifeApp.instance.repo
     var type by rememberSaveable { mutableStateOf(PeriodType.WEEK) }
     var startDay by rememberSaveable(type) { mutableStateOf(Period.current(type).start.toEpochDay()) }
@@ -76,6 +76,27 @@ fun StatsScreen() {
         value = withContext(Dispatchers.Default) { Stats.compute(e, period, System.currentTimeMillis()) }
     }
     var selected by remember(type) { mutableStateOf<Long?>(null) }
+
+    // --- Zdrowie w okresie
+    val healthSamples by remember(from, to) { LifeApp.instance.db.health().observeAll(from, to) }
+        .collectAsState(initial = emptyList())
+    val healthTrends = remember(healthSamples, type, startDay) {
+        pl.rafal.lifecycle.domain.HealthTrends.metricTrends(healthSamples, period)
+    }
+    val extEvents by remember(from, to) { LifeApp.instance.db.ext().observe(from, to) }.collectAsState(initial = emptyList())
+    val stepBucketsH by remember(from, to) { LifeApp.instance.db.steps().observeRange(from, to) }
+        .collectAsState(initial = emptyList())
+    val healthInsights by produceState<List<String>>(emptyList(), entries, healthSamples, extEvents, stepBucketsH, type, startDay) {
+        val e = entries ?: return@produceState
+        val cats = catMap
+        value = withContext(Dispatchers.Default) {
+            pl.rafal.lifecycle.domain.HealthTrends.correlations(
+                e, cats, pl.rafal.lifecycle.tracking.Steps.perDay(stepBucketsH), healthSamples,
+                pl.rafal.lifecycle.domain.ExchangeImport.dailyCounts(extEvents, pl.rafal.lifecycle.domain.ExchangeImport.SRC_NIGHT, ""),
+                if (type == PeriodType.WEEK) prev.start else period.start, period.end, System.currentTimeMillis(),
+            )
+        }
+    }
 
     val places by repo.places.collectAsState(initial = emptyList())
     val insightFrom = remember { Fmt.dayStart(LocalDate.now().minusDays(57)) }
@@ -140,6 +161,7 @@ fun StatsScreen() {
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { ScreenHeader("Trendy") }
+        item { SummaryShortcut(period) { onSummary("summary:${type.name}:$startDay") } }
         item {
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
                 PeriodType.entries.forEachIndexed { i, t ->
@@ -309,6 +331,15 @@ fun StatsScreen() {
                     avgLabel = if (type == PeriodType.YEAR) "średnio dziennie w roku" else "średnio dziennie",
                 )
             }
+        }
+
+        if (healthTrends.isNotEmpty()) {
+            item { SectionTitle("Zdrowie · " + if (type == PeriodType.YEAR) "średnio w miesiącach" else "średnio vs poprzedni okres") }
+            item { HealthTrendsCard(healthTrends, emptyList(), "$type-$startDay", onHealth) }
+        }
+        if (healthInsights.isNotEmpty()) {
+            item { SectionTitle("Zależności zdrowotne" + if (type == PeriodType.WEEK) " · 2 tygodnie" else "") }
+            item { HealthInsightsCard(healthInsights) }
         }
 
         if (insights.isNotEmpty()) {

@@ -303,7 +303,7 @@ class WatchdogWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
         safe("Import kroków") { StepsImporter.run(ctx) }
         safe("Pomiary zdrowotne") { HealthSync.run(ctx) }
         safe("Sprawdzanie celów") { GoalChecker.run(ctx) }
-        safe("Podsumowanie tygodnia") { WeeklySummary.maybeNotify(ctx) }
+        safe("Podsumowanie tygodnia") { pl.rafal.lifecycle.domain.Summaries.maybeNotify(ctx) }
         safe("Kopia zapasowa") { Backup.autoBackup(ctx) }
         safe("Widżet") { DobaWidget.updateAll(ctx) }
         val db = (applicationContext as LifeApp).db

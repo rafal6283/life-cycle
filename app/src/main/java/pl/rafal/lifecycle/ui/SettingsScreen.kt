@@ -96,6 +96,8 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
     var stepGoalDialog by remember { mutableStateOf(false) }
     var stepGoalTick by remember { mutableIntStateOf(0) }
     var weekly by remember { mutableStateOf(prefs.weeklySummary) }
+    var monthly by remember { mutableStateOf(prefs.monthlySummary) }
+    var yearly by remember { mutableStateOf(prefs.yearlySummary) }
     var backupTree by remember { mutableStateOf(prefs.backupTree) }
     var lastBackup by remember { mutableStateOf(prefs.lastBackupAt) }
     var summaryText by remember { mutableStateOf<String?>(null) }
@@ -250,9 +252,18 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
                 prefs.weeklySummary = it
             }
             HorizontalDivider(Modifier.padding(start = 16.dp))
-            NavRow("Pokaż podsumowanie tego tygodnia", null) {
-                scope.launch { summaryText = WeeklySummary.build(ctx) ?: "Brak danych z tego tygodnia." }
+            HorizontalDivider(Modifier.padding(start = 16.dp))
+            SwitchRow("Podsumowanie miesiąca", "Powiadomienie 1. dnia kolejnego miesiąca", monthly) {
+                monthly = it
+                prefs.monthlySummary = it
             }
+            HorizontalDivider(Modifier.padding(start = 16.dp))
+            SwitchRow("Podsumowanie roku", "Powiadomienie 1 stycznia", yearly) {
+                yearly = it
+                prefs.yearlySummary = it
+            }
+            HorizontalDivider(Modifier.padding(start = 16.dp))
+            NavRow("Otwórz podsumowania", "Tydzień, miesiąc i rok — także poprzednie") { onOpen("summary") }
         }
 
         SectionTitle("Kopia zapasowa")
