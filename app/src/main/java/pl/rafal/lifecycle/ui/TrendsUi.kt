@@ -35,6 +35,7 @@ import pl.rafal.lifecycle.domain.Trends
 import pl.rafal.lifecycle.util.Fmt
 import java.time.Instant
 import java.time.format.DateTimeFormatter
+import androidx.compose.ui.platform.LocalDensity
 
 /** Animowany postęp 0→1, restartowany przy zmianie klucza. */
 @Composable
@@ -52,15 +53,25 @@ fun TrendCard(content: @Composable () -> Unit) {
     ) { content() }
 }
 
-/** Typowy dzień: 24 słupki 100%, każdy pokazuje, co zwykle robisz o tej godzinie. */
+/**
+ * Typowy dzień: 24 słupki 100%, każdy pokazuje, co zwykle robisz o tej godzinie.
+ * Słupki rosną kaskadą; dotknięcie lub przeciągnięcie pokazuje, co dominuje o danej godzinie.
+ */
 @Composable
 fun TypicalDayChart(hours: List<Map<Long, Long>>, categories: List<Category>, animKey: Any) {
     val grow = rememberGrow(animKey)
     val measurer = rememberTextMeasurer()
     val style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val tipStyle = MaterialTheme.typography.labelMedium.copy(color = MaterialTheme.colorScheme.inverseOnSurface, fontWeight = FontWeight.SemiBold)
+    val tipBg = MaterialTheme.colorScheme.inverseSurface
     val order = categories.withIndex().associate { it.value.id to it.index }
     val colors = categories.associate { it.id to catColor(it) }
-    Canvas(Modifier.fillMaxWidth().height(170.dp)) {
+    val names = categories.associate { it.id to it.name }
+    val sel = rememberSelection(animKey)
+    Canvas(
+        Modifier.fillMaxWidth().height(170.dp)
+            .chartTouch(sel, 24) { o, w -> (o.x / (w / 24)).toInt().coerceIn(0, 23) }
+    ) {
         val labelH = 18.dp.toPx()
         val chartH = size.height - labelH
         val slot = size.width / 24
@@ -70,9 +81,11 @@ fun TypicalDayChart(hours: List<Map<Long, Long>>, categories: List<Category>, an
             if (total <= 0f) return@forEachIndexed
             var y = chartH
             val x = h * slot + (slot - bw) / 2
+            val g = stagger(grow, h, 24)
+            val a = barAlpha(h, sel, 1f)
             m.toList().sortedBy { order[it.first] ?: Int.MAX_VALUE }.forEach { (id, v) ->
-                val hgt = chartH * (v / total) * grow
-                drawRect(colors[id] ?: UnknownGray, Offset(x, y - hgt), Size(bw, hgt))
+                val hgt = chartH * (v / total) * g
+                drawRect((colors[id] ?: UnknownGray).copy(alpha = a), Offset(x, y - hgt), Size(bw, hgt))
                 y -= hgt
             }
         }
@@ -80,16 +93,34 @@ fun TypicalDayChart(hours: List<Map<Long, Long>>, categories: List<Category>, an
             val t = measurer.measure(h.toString(), style)
             drawText(t, topLeft = Offset(h * slot, chartH + 3.dp.toPx()))
         }
+        val s = sel.last
+        if (s in hours.indices) {
+            val m = hours[s]
+            val total = m.values.sum()
+            val text = if (total <= 0L) "$s:00 · brak danych" else {
+                val top = m.entries.sortedByDescending { it.value }.take(2)
+                "$s:00 · " + top.joinToString(", ") { "${names[it.key] ?: "inne"} ${it.value * 100 / total}%" }
+            }
+            tooltip(measurer, text, s * slot + slot / 2, 0f + 34.dp.toPx(), tipStyle, tipBg, sel.alpha.value)
+        }
     }
 }
 
-/** Pory snu: pionowe paski od zaśnięcia (góra) do pobudki (dół), oś 20:00–12:00. */
+/**
+ * Pory snu: pionowe paski od zaśnięcia (góra) do pobudki (dół), oś 20:00–12:00.
+ * Paski "spływają" kaskadą; dotknięcie nocy pokazuje godziny i długość snu.
+ */
 @Composable
 fun SleepTimesChart(nights: List<Trends.Night>, color: Color, animKey: Any) {
     val grow = rememberGrow(animKey)
     val measurer = rememberTextMeasurer()
     val style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val tipStyle = MaterialTheme.typography.labelMedium.copy(color = MaterialTheme.colorScheme.inverseOnSurface, fontWeight = FontWeight.SemiBold)
+    val tipBg = MaterialTheme.colorScheme.inverseSurface
     val grid = MaterialTheme.colorScheme.outlineVariant
+    val sel = rememberSelection(animKey)
+    val density = LocalDensity.current
+    val leftPx = with(density) { 40.dp.toPx() }
     fun minutesFrom20(ms: Long): Float {
         val t = Instant.ofEpochMilli(ms).atZone(Fmt.zone).toLocalTime()
         var m = t.hour * 60 + t.minute - 20 * 60
@@ -97,8 +128,15 @@ fun SleepTimesChart(nights: List<Trends.Night>, color: Color, animKey: Any) {
         return m.toFloat().coerceIn(0f, 16 * 60f)
     }
     val dayF = DateTimeFormatter.ofPattern("d")
-    Canvas(Modifier.fillMaxWidth().height(200.dp)) {
-        val left = 40.dp.toPx()
+    val tipF = DateTimeFormatter.ofPattern("EEE d.MM", Fmt.PL)
+    val hm = DateTimeFormatter.ofPattern("HH:mm")
+    Canvas(
+        Modifier.fillMaxWidth().height(200.dp)
+            .chartTouch(sel, nights.size) { o, w ->
+                if (nights.isEmpty() || o.x < leftPx) -1 else ((o.x - leftPx) / ((w - leftPx) / nights.size)).toInt().coerceIn(0, nights.size - 1)
+            }
+    ) {
+        val left = leftPx
         val bottomH = 16.dp.toPx()
         val chartH = size.height - bottomH
         val span = 16 * 60f
@@ -115,13 +153,25 @@ fun SleepTimesChart(nights: List<Trends.Night>, color: Color, animKey: Any) {
             val a = minutesFrom20(night.start)
             val b = minutesFrom20(night.end).coerceAtLeast(a + 10f)
             val y1 = chartH * a / span
-            val y2 = y1 + (chartH * (b - a) / span) * grow
+            val y2 = y1 + (chartH * (b - a) / span) * stagger(grow, i, n)
             val x = left + i * slot + (slot - bw) / 2
-            drawRoundRect(color, Offset(x, y1), Size(bw, y2 - y1), CornerRadius(bw / 2, bw / 2))
+            drawRoundRect(color.copy(alpha = barAlpha(i, sel, 1f)), Offset(x, y1), Size(bw, y2 - y1), CornerRadius(bw / 2, bw / 2))
             if (n <= 10 || i % 5 == 0) {
                 val t = measurer.measure(night.day.format(dayF), style)
                 drawText(t, topLeft = Offset(left + i * slot + slot / 2 - t.size.width / 2f, chartH + 2.dp.toPx()))
             }
+        }
+        val s = sel.last
+        if (s in nights.indices) {
+            val night = nights[s]
+            val st = Instant.ofEpochMilli(night.start).atZone(Fmt.zone)
+            val en = Instant.ofEpochMilli(night.end).atZone(Fmt.zone)
+            val y1 = chartH * minutesFrom20(night.start) / span
+            tooltip(
+                measurer,
+                "${night.day.format(tipF)} · ${st.format(hm)}–${en.format(hm)} · ${Fmt.durationShort(night.end - night.start)}",
+                left + s * slot + slot / 2, y1, tipStyle, tipBg, sel.alpha.value,
+            )
         }
     }
     if (nights.isNotEmpty()) {

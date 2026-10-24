@@ -84,6 +84,12 @@ import pl.rafal.lifecycle.data.Category
 import pl.rafal.lifecycle.util.Fmt
 import kotlin.math.cos
 import kotlin.math.sin
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 
 // ---------- Motyw ----------
 
@@ -255,12 +261,16 @@ fun CategoryPicker(categories: List<Category>, selected: Long?, onSelect: (Long)
 /** Pasek udziału (np. w podsumowaniu dnia). */
 @Composable
 fun ShareBar(fraction: Float, color: Color, modifier: Modifier = Modifier) {
+    // pasek wypełnia się płynnie przy pojawieniu i przy każdej zmianie
+    val target = fraction.coerceIn(0f, 1f)
+    val anim = remember { Animatable(0f) }
+    LaunchedEffect(target) { anim.animateTo(target, spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessLow)) }
     Box(
         modifier.height(6.dp).clip(RoundedCornerShape(3.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Box(
-            Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).height(6.dp)
+            Modifier.fillMaxWidth(anim.value.coerceIn(0f, 1f)).height(6.dp)
                 .clip(RoundedCornerShape(3.dp)).background(color)
         )
     }
@@ -272,12 +282,14 @@ data class RingArc(val color: Color, val start: Long, val end: Long)
 
 /** Pierścień 24-godzinny: segmenty ułożone według pory dnia (jak tarcza zegara). */
 @Composable
-fun ClockRing(arcs: List<RingArc>, dayLength: Long, now: Long?, modifier: Modifier, stroke: Dp = 30.dp) {
+fun ClockRing(arcs: List<RingArc>, dayLength: Long, now: Long?, modifier: Modifier, stroke: Dp = 30.dp, animKey: Any = dayLength) {
     val track = MaterialTheme.colorScheme.surfaceVariant
     val tickColor = MaterialTheme.colorScheme.onSurfaceVariant
     val nowColor = MaterialTheme.colorScheme.onSurface
     val measurer = rememberTextMeasurer()
     val style = MaterialTheme.typography.labelSmall.copy(color = tickColor)
+    // tarcza "nawija się" od północy przy pokazaniu dnia
+    val grow = rememberGrow(animKey)
     Canvas(modifier) {
         val sw = stroke.toPx()
         val inset = sw / 2 + 16.dp.toPx()
@@ -285,10 +297,12 @@ fun ClockRing(arcs: List<RingArc>, dayLength: Long, now: Long?, modifier: Modifi
         val arcSize = Size(d, d)
         val tl = Offset((size.width - d) / 2, (size.height - d) / 2)
         drawArc(track, 0f, 360f, false, tl, arcSize, style = Stroke(sw))
+        val limit = -90f + 360f * grow
         arcs.forEach { a ->
             val start = -90f + 360f * a.start / dayLength
+            if (start >= limit) return@forEach
             val sweep = (360f * (a.end - a.start) / dayLength).coerceAtLeast(0.8f)
-            drawArc(a.color, start, sweep, false, tl, arcSize, style = Stroke(sw))
+            drawArc(a.color, start, minOf(sweep, limit - start), false, tl, arcSize, style = Stroke(sw))
         }
         val r = d / 2
         val labelR = r + sw / 2 + 9.dp.toPx()
@@ -314,7 +328,7 @@ fun ClockRing(arcs: List<RingArc>, dayLength: Long, now: Long?, modifier: Modifi
                 strokeWidth = 1.dp.toPx(),
             )
         }
-        if (now != null) {
+        if (now != null && grow >= 1f) {
             val ang = Math.toRadians(-90.0 + 360.0 * now / dayLength)
             val p = Offset(center.x + r * cos(ang).toFloat(), center.y + r * sin(ang).toFloat())
             drawCircle(Color.White, sw / 2 * 0.55f, p)
@@ -327,12 +341,14 @@ fun ClockRing(arcs: List<RingArc>, dayLength: Long, now: Long?, modifier: Modifi
 @Composable
 fun ProportionRing(slices: List<Pair<Color, Float>>, modifier: Modifier, stroke: Dp = 30.dp) {
     val track = MaterialTheme.colorScheme.surfaceVariant
+    val grow = rememberGrow(slices.map { it.second })
     Canvas(modifier) {
         val sw = stroke.toPx()
         val inset = sw / 2 + 16.dp.toPx()
         val d = size.minDimension - 2 * inset
         val arcSize = Size(d, d)
         val tl = Offset((size.width - d) / 2, (size.height - d) / 2)
+        drawArc(track, 0f, 360f, false, tl, arcSize, style = Stroke(sw))
         val total = slices.sumOf { it.second.toDouble() }.toFloat()
         if (total <= 0f) {
             drawArc(track, 0f, 360f, false, tl, arcSize, style = Stroke(sw))
@@ -340,15 +356,21 @@ fun ProportionRing(slices: List<Pair<Color, Float>>, modifier: Modifier, stroke:
         }
         val gap = if (slices.size > 1) 1.5f else 0f
         var a = -90f
+        val limit = -90f + 360f * grow
         slices.forEach { (c, v) ->
             val sweep = 360f * v / total
-            drawArc(c, a + gap / 2, (sweep - gap).coerceAtLeast(0.6f), false, tl, arcSize, style = Stroke(sw))
+            if (a < limit) {
+                drawArc(c, a + gap / 2, (minOf(sweep, limit - a) - gap).coerceAtLeast(0.6f), false, tl, arcSize, style = Stroke(sw))
+            }
             a += sweep
         }
     }
 }
 
-/** Słupki skumulowane (rozkład w czasie). */
+/**
+ * Słupki skumulowane (rozkład w czasie). Wyrastają kaskadą od lewej;
+ * dotknięcie albo przeciągnięcie palcem pokazuje sumę dla słupka w dymku.
+ */
 @Composable
 fun BarsChart(
     bars: List<List<Pair<Color, Long>>>,
@@ -356,14 +378,23 @@ fun BarsChart(
     modifier: Modifier = Modifier,
     avg: Long? = null,
     animKey: Any = labels,
+    tipLabels: List<String>? = null,
 ) {
     val grow = rememberGrow(animKey)
     val avgColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
     val measurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val tipStyle = MaterialTheme.typography.labelMedium.copy(color = MaterialTheme.colorScheme.inverseOnSurface, fontWeight = FontWeight.SemiBold)
+    val tipBg = MaterialTheme.colorScheme.inverseSurface
     val grid = MaterialTheme.colorScheme.outlineVariant
-    Canvas(modifier.fillMaxWidth().height(190.dp)) {
-        val maxV = (bars.maxOfOrNull { b -> b.sumOf { it.second } } ?: 0L).coerceAtLeast(60_000L)
+    val sel = rememberSelection(animKey)
+    val maxRaw = (bars.maxOfOrNull { b -> b.sumOf { it.second } } ?: 0L).coerceAtLeast(60_000L)
+    val maxAnim by animateFloatAsState(maxRaw.toFloat(), spring(stiffness = Spring.StiffnessLow), label = "max")
+    Canvas(
+        modifier.fillMaxWidth().height(190.dp)
+            .chartTouch(sel, bars.size) { o, w -> if (bars.isEmpty()) -1 else (o.x / (w / bars.size)).toInt().coerceIn(0, bars.size - 1) }
+    ) {
+        val maxV = maxAnim
         val labelH = 20.dp.toPx()
         val topPad = 18.dp.toPx()
         val chartH = size.height - labelH - topPad
@@ -376,9 +407,11 @@ fun BarsChart(
         bars.forEachIndexed { i, stack ->
             var y = baseY
             val x = i * slot + (slot - bw) / 2
+            val g = stagger(grow, i, n)
+            val a = barAlpha(i, sel, 1f)
             stack.forEach { (c, v) ->
-                val h = chartH * (v.toFloat() / maxV) * grow
-                if (h > 0f) drawRect(c, Offset(x, y - h), Size(bw, h))
+                val h = chartH * (v.toFloat() / maxV) * g
+                if (h > 0f) drawRect(c.copy(alpha = c.alpha * a), Offset(x, y - h), Size(bw, h))
                 y -= h
             }
             val show = n <= 12 || i % 5 == 0
@@ -387,16 +420,26 @@ fun BarsChart(
                 drawText(tl, topLeft = Offset(i * slot + slot / 2 - tl.size.width / 2f, baseY + 4.dp.toPx()))
             }
         }
-        val mt = measurer.measure(Fmt.durationShort(maxV), labelStyle)
+        val mt = measurer.measure(Fmt.durationShort(maxRaw), labelStyle)
         drawText(mt, topLeft = Offset(0f, 0f))
         if (avg != null && avg > 0) {
             val y = baseY - chartH * (avg.toFloat() / maxV)
             drawLine(
-                avgColor, Offset(0f, y), Offset(size.width, y), 1.5.dp.toPx(),
+                avgColor.copy(alpha = avgColor.alpha * grow), Offset(0f, y), Offset(size.width * grow, y), 1.5.dp.toPx(),
                 pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f)),
             )
             val at = measurer.measure("śr. " + Fmt.durationShort(avg), labelStyle)
-            drawText(at, topLeft = Offset(size.width - at.size.width, (y - at.size.height - 2f).coerceAtLeast(0f)))
+            drawText(at, topLeft = Offset(size.width - at.size.width, (y - at.size.height - 2f).coerceAtLeast(0f)), alpha = grow)
+        }
+        val s = sel.last
+        if (s in bars.indices) {
+            val total = bars[s].sumOf { it.second }
+            val top = baseY - chartH * (total.toFloat() / maxV)
+            val name = tipLabels?.getOrNull(s) ?: labels.getOrNull(s) ?: ""
+            tooltip(
+                measurer, (if (name.isNotEmpty()) "$name · " else "") + Fmt.durationShort(total),
+                s * slot + slot / 2, top, tipStyle, tipBg, sel.alpha.value, grid, baseY,
+            )
         }
     }
 }

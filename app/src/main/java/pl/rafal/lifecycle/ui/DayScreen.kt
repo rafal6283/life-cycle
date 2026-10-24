@@ -187,6 +187,7 @@ fun DayScreen() {
                                 now = if (isToday) now - from else null,
                                 modifier = Modifier.fillMaxSize(),
                                 stroke = 40.dp,
+                                animKey = epochDay,
                             )
                             DonutCenter(stepsTotal, tracked, null)
                         }

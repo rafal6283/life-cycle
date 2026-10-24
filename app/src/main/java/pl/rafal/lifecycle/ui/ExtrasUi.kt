@@ -605,6 +605,7 @@ fun StepsCard(steps: Long, hours: List<Long>, goal: Int, onClick: () -> Unit) {
         if (hours.any { it > 0 }) {
             Spacer(Modifier.height(10.dp))
             val track = MaterialTheme.colorScheme.surfaceVariant
+            val grow = rememberGrow(hours.sum() > 0)
             androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(36.dp)) {
                 val max = (hours.maxOrNull() ?: 0L).coerceAtLeast(1L)
                 val slot = size.width / 24
@@ -613,7 +614,7 @@ fun StepsCard(steps: Long, hours: List<Long>, goal: Int, onClick: () -> Unit) {
                     val x = i * slot + (slot - bw) / 2
                     drawRect(track, androidx.compose.ui.geometry.Offset(x, size.height - 2f), androidx.compose.ui.geometry.Size(bw, 2f))
                     if (v > 0) {
-                        val h = (size.height * v / max).coerceAtLeast(3f)
+                        val h = (size.height * v / max).coerceAtLeast(3f) * stagger(grow, i, 24)
                         drawRect(StepsGreen, androidx.compose.ui.geometry.Offset(x, size.height - h), androidx.compose.ui.geometry.Size(bw, h))
                     }
                 }
@@ -704,14 +705,22 @@ fun StepsStatsCard(avg: Long, prevAvg: Long, total: Long, bars: List<Long>, labe
     }
 }
 
+/** Słupki kroków: rosną kaskadą, linia celu rysuje się od lewej, dotyk pokazuje liczbę kroków. */
 @Composable
 private fun StepBars(bars: List<Long>, labels: List<String>) {
     val measurer = androidx.compose.ui.text.rememberTextMeasurer()
     val style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val tipStyle = MaterialTheme.typography.labelMedium.copy(color = MaterialTheme.colorScheme.inverseOnSurface, fontWeight = FontWeight.SemiBold)
+    val tipBg = MaterialTheme.colorScheme.inverseSurface
     val grid = MaterialTheme.colorScheme.outlineVariant
     val ctx = LocalContext.current
     val goal = remember { pl.rafal.lifecycle.util.Prefs(ctx).stepGoal }
-    androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(150.dp)) {
+    val grow = rememberGrow(bars)
+    val sel = rememberSelection(bars)
+    androidx.compose.foundation.Canvas(
+        Modifier.fillMaxWidth().height(150.dp)
+            .chartTouch(sel, bars.size) { o, w -> if (bars.isEmpty()) -1 else (o.x / (w / bars.size)).toInt().coerceIn(0, bars.size - 1) }
+    ) {
         val labelH = 20.dp.toPx()
         val chartH = size.height - labelH
         val max = maxOf(bars.maxOrNull() ?: 0L, goal.toLong(), 1L)
@@ -723,20 +732,22 @@ private fun StepBars(bars: List<Long>, labels: List<String>) {
             drawLine(
                 StepsGreen.copy(alpha = 0.5f),
                 androidx.compose.ui.geometry.Offset(0f, goalY),
-                androidx.compose.ui.geometry.Offset(size.width, goalY),
+                androidx.compose.ui.geometry.Offset(size.width * grow, goalY),
                 strokeWidth = 1.5f,
                 pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f)),
             )
         }
         drawLine(grid, androidx.compose.ui.geometry.Offset(0f, chartH), androidx.compose.ui.geometry.Offset(size.width, chartH), 1f)
         bars.forEachIndexed { i, v ->
-            val h = chartH * v / max
+            val h = chartH * v / max * stagger(grow, i, n)
             val x = i * slot + (slot - bw) / 2
             if (h > 0f) {
-                drawRect(
-                    if (goal in 1..v) StepsGreen else StepsGreen.copy(alpha = 0.55f),
+                val base = if (goal in 1..v) 1f else 0.55f
+                drawRoundRect(
+                    StepsGreen.copy(alpha = barAlpha(i, sel, base)),
                     androidx.compose.ui.geometry.Offset(x, chartH - h),
                     androidx.compose.ui.geometry.Size(bw, h),
+                    androidx.compose.ui.geometry.CornerRadius(minOf(bw / 2, 3.dp.toPx())),
                 )
             }
             if ((n <= 12 || i % 5 == 0) && i < labels.size) {
@@ -746,6 +757,15 @@ private fun StepBars(bars: List<Long>, labels: List<String>) {
                     topLeft = androidx.compose.ui.geometry.Offset(i * slot + slot / 2 - t.size.width / 2f, chartH + 4.dp.toPx()),
                 )
             }
+        }
+        val s = sel.last
+        if (s in bars.indices) {
+            val v = bars[s]
+            val name = labels.getOrNull(s)?.let { "$it · " } ?: ""
+            tooltip(
+                measurer, name + Fmt.steps(v) + " kroków" + (if (goal in 1..v) " ✓" else ""),
+                s * slot + slot / 2, chartH - chartH * v / max, tipStyle, tipBg, sel.alpha.value, grid, chartH,
+            )
         }
     }
 }
