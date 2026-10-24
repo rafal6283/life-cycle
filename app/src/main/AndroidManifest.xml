@@ -112,13 +112,37 @@
         <receiver
             android:name=".widget.DobaWidget"
             android:exported="true"
-            android:label="Doba">
+            android:label="Doba · Mały">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.DobaWidgetLarge"
+            android:exported="true"
+            android:label="Doba · Dzień">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_large_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.DobaWidgetWeek"
+            android:exported="true"
+            android:label="Doba · Tydzień">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_week_info" />
         </receiver>
 
         <service

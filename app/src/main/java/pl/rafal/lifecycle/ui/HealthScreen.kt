@@ -96,8 +96,13 @@ fun HealthScreen() {
     val from = Fmt.dayStart(today.minusDays(29))
     val to = Fmt.dayStart(today.plusDays(1))
     val samples by remember(from) { db.health().observeAll(from, to) }.collectAsState(initial = null)
-    val ext by remember(from) { db.ext().observe(Fmt.dayStart(today.minusDays(31)), to) }.collectAsState(initial = emptyList())
-    val sources by remember { db.ext().observeSources() }.collectAsState(initial = emptyList())
+    val hiddenExt by pl.rafal.lifecycle.domain.ExtVisibility.hidden.collectAsState()
+    val extAll by remember(from) { db.ext().observe(Fmt.dayStart(today.minusDays(31)), to) }.collectAsState(initial = emptyList())
+    val ext = remember(extAll, hiddenExt) { pl.rafal.lifecycle.domain.ExtVisibility.filter(extAll, hiddenExt) }
+    val sourcesAll by remember { db.ext().observeSources() }.collectAsState(initial = emptyList())
+    val sources = remember(sourcesAll, hiddenExt) {
+        sourcesAll.filter { pl.rafal.lifecycle.domain.ExtVisibility.key(it.source, it.label) !in hiddenExt }
+    }
     var syncing by remember { mutableStateOf(false) }
     var detail by remember { mutableStateOf<Metric?>(null) }
     var extDetail by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -214,7 +219,8 @@ fun HealthScreen() {
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Wiatry z Nocnego licznika, liczniki z Kreski albo epizody AF z Polar EKG. " +
+                    (if (pl.rafal.lifecycle.domain.ExtVisibility.FARTS in hiddenExt) "Liczniki z Kreski albo epizody AF z Polar EKG. "
+                    else "Wiatry z Nocnego licznika, liczniki z Kreski albo epizody AF z Polar EKG. ") +
                         "W tamtej aplikacji wybierz eksport i „Udostępnij → Doba” albo zapisz plik i wskaż go tutaj. " +
                         "Ponowny import zastępuje poprzednie dane z tego źródła.",
                     style = MaterialTheme.typography.bodySmall,
@@ -712,7 +718,9 @@ fun HealthTodayCard(day: LocalDate, onOpen: () -> Unit) {
     val from = Fmt.dayStart(day)
     val to = Fmt.dayStart(day.plusDays(1))
     val samples by remember(from) { db.health().observeAll(from - 6 * DAY_MS, to) }.collectAsState(initial = emptyList())
-    val ext by remember(from) { db.ext().observe(from - DAY_MS, to) }.collectAsState(initial = emptyList())
+    val hiddenExt by pl.rafal.lifecycle.domain.ExtVisibility.hidden.collectAsState()
+    val extAll by remember(from) { db.ext().observe(from - DAY_MS, to) }.collectAsState(initial = emptyList())
+    val ext = remember(extAll, hiddenExt) { pl.rafal.lifecycle.domain.ExtVisibility.filter(extAll, hiddenExt) }
     val chips = remember(samples, ext) {
         val out = mutableListOf<Pair<Metric?, String>>()
         val byM = samples.groupBy { it.metric }

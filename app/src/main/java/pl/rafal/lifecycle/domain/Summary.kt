@@ -182,7 +182,7 @@ object Summaries {
         }
 
         // --- Z innych aplikacji
-        val ext = db.ext().all().filter { it.start in from until to }
+        val ext = ExtVisibility.filter(db.ext().all().filter { it.start in from until to })
         val extRows = mutableListOf<SumRow>()
         ext.map { it.source to it.label }.distinct().forEach { (src, label) ->
             val counts = ExchangeImport.dailyCounts(ext, src, label)

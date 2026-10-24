@@ -83,7 +83,9 @@ fun StatsScreen(onSummary: (String) -> Unit = {}, onHealth: () -> Unit = {}) {
     val healthTrends = remember(healthSamples, type, startDay) {
         pl.rafal.lifecycle.domain.HealthTrends.metricTrends(healthSamples, period)
     }
-    val extEvents by remember(from, to) { LifeApp.instance.db.ext().observe(from, to) }.collectAsState(initial = emptyList())
+    val hiddenExt by pl.rafal.lifecycle.domain.ExtVisibility.hidden.collectAsState()
+    val extAll by remember(from, to) { LifeApp.instance.db.ext().observe(from, to) }.collectAsState(initial = emptyList())
+    val extEvents = remember(extAll, hiddenExt) { pl.rafal.lifecycle.domain.ExtVisibility.filter(extAll, hiddenExt) }
     val stepBucketsH by remember(from, to) { LifeApp.instance.db.steps().observeRange(from, to) }
         .collectAsState(initial = emptyList())
     val healthInsights by produceState<List<String>>(emptyList(), entries, healthSamples, extEvents, stepBucketsH, type, startDay) {

@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="widget_description">Pierścień dzisiejszego dnia i bieżąca aktywność</string>
+    <string name="widget_large_description">Dzień: pierścień, kroki, kategorie, zdrowie i szybkie przełączanie</string>
+    <string name="widget_week_description">Tydzień: czas w kategoriach dzień po dniu, sen i kroki</string>
     <string name="tile_label">Teraz robię…</string>
 </resources>

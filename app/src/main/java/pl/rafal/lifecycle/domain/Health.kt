@@ -149,6 +149,9 @@ object ExchangeImport {
         db.ext().deleteSource(source, label)
         db.ext().insertAll(out)
         val n = out.count { it.type != "window" && it.type != "day_total" }
+        if (!ExtVisibility.visible(source, label)) {
+            return "Zaimportowano z ${sourceLabel(source, label)}, ale to źródło jest ukryte — włącz je w Ustawieniach → Dane z innych aplikacji"
+        }
         return "Zaimportowano z ${sourceLabel(source, label)}: " + when (source) {
             SRC_NIGHT -> "$n wiatrów, ${out.count { it.type == "window" }} nocy"
             SRC_ECG -> "$n epizodów AF"
@@ -172,3 +175,36 @@ object ExchangeImport {
 }
 
 fun Double.fmt1(): String = String.format(Locale.forLanguageTag("pl-PL"), "%.1f", this)
+
+/**
+ * Które importowane źródła pokazywać. Ukryte źródło (np. wiatry z Nocnego licznika) znika ze wszystkich
+ * ekranów, podsumowań i zależności; dane zostają w bazie i kopii, więc można je w każdej chwili przywrócić.
+ */
+object ExtVisibility {
+    private const val PREFS = "ext_visibility"
+    private const val KEY = "hidden"
+
+    /** Wiatry z Nocnego licznika — przełącznik „Wiatry” w Ustawieniach. */
+    val FARTS = ExchangeImport.SRC_NIGHT + "|"
+
+    val hidden: kotlinx.coroutines.flow.MutableStateFlow<Set<String>> by lazy {
+        val sp = LifeApp.instance.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        kotlinx.coroutines.flow.MutableStateFlow(sp.getStringSet(KEY, emptySet())!!.toSet())
+    }
+
+    fun key(source: String, label: String) = "$source|$label"
+
+    fun visible(source: String, label: String) = key(source, label) !in hidden.value
+
+    val fartsVisible: Boolean get() = FARTS !in hidden.value
+
+    fun set(ctx: Context, source: String, label: String, visible: Boolean) {
+        val k = key(source, label)
+        val next = if (visible) hidden.value - k else hidden.value + k
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putStringSet(KEY, next).apply()
+        hidden.value = next
+    }
+
+    fun filter(list: List<ExtEvent>, hiddenSet: Set<String> = hidden.value): List<ExtEvent> =
+        if (hiddenSet.isEmpty()) list else list.filter { key(it.source, it.label) !in hiddenSet }
+}

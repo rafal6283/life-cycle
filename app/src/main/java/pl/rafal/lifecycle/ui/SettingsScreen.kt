@@ -298,6 +298,28 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
             }
         }
 
+        SectionTitle("Dane z innych aplikacji")
+        Group {
+            val hiddenExt by pl.rafal.lifecycle.domain.ExtVisibility.hidden.collectAsState()
+            val extSources by remember { pl.rafal.lifecycle.LifeApp.instance.db.ext().observeSources() }
+                .collectAsState(initial = emptyList())
+            SwitchRow(
+                "Wiatry",
+                "Dane z Nocnego licznika. Wyłączone znikają z całej aplikacji (zostają tylko w kopii zapasowej).",
+                pl.rafal.lifecycle.domain.ExtVisibility.FARTS !in hiddenExt,
+            ) { pl.rafal.lifecycle.domain.ExtVisibility.set(ctx, pl.rafal.lifecycle.domain.ExchangeImport.SRC_NIGHT, "", it) }
+            extSources.filter { it.source != pl.rafal.lifecycle.domain.ExchangeImport.SRC_NIGHT }
+                .distinctBy { it.source to it.label }
+                .forEach { src ->
+                    HorizontalDivider(Modifier.padding(start = 16.dp))
+                    SwitchRow(
+                        pl.rafal.lifecycle.domain.ExchangeImport.sourceLabel(src.source, src.label),
+                        "${src.n} wpisów · import ${pl.rafal.lifecycle.util.Fmt.dateTime(src.last)}",
+                        pl.rafal.lifecycle.domain.ExtVisibility.key(src.source, src.label) !in hiddenExt,
+                    ) { pl.rafal.lifecycle.domain.ExtVisibility.set(ctx, src.source, src.label, it) }
+                }
+        }
+
         SectionTitle("Inne aplikacje")
         Group {
             NavRow("Wyślij do Kreski", "Cała historia w formacie wymiany zdarzeń") {

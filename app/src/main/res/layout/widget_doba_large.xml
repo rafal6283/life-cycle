@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:padding="14dp">
+
+    <FrameLayout
+        android:layout_width="118dp"
+        android:layout_height="118dp">
+
+        <ImageView
+            android:id="@+id/ring"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="Pierścień dnia" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/center_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#FFFFFFFF"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/center_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="kroków"
+                android:textColor="#B3FFFFFF"
+                android:textSize="10sp" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="14dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="#FFFFFFFF"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="#CCFFFFFF"
+            android:textSize="12sp" />
+
+        <ProgressBar
+            android:id="@+id/steps_bar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="6dp"
+            android:layout_marginTop="6dp"
+            android:max="100"
+            android:progressDrawable="@drawable/widget_progress" />
+
+        <TextView
+            android:id="@+id/steps_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="#B3FFFFFF"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/cats"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:lineSpacingExtra="1dp"
+            android:maxLines="4"
+            android:textColor="#E6FFFFFF"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/health"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="#B3FFFFFF"
+            android:textSize="11sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/btn_quick"
+                android:layout_width="0dp"
+                android:layout_height="28dp"
+                android:layout_weight="1"
+                android:background="@drawable/widget_btn"
+                android:gravity="center"
+                android:text="Teraz robię…"
+                android:textColor="#FFFFFFFF"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/btn_refresh"
+                android:layout_width="36dp"
+                android:layout_height="28dp"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/widget_btn"
+                android:gravity="center"
+                android:text="⟳"
+                android:textColor="#FFFFFFFF"
+                android:textSize="15sp" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>
