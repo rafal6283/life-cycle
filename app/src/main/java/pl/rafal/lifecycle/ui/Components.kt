@@ -31,7 +31,13 @@ import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.Commute
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.MonitorWeight
+import androidx.compose.material.icons.filled.Stairs
+import androidx.compose.material.icons.filled.Thermostat
+import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Flight
@@ -155,6 +161,13 @@ object CatIcons {
         "church" to Icons.Filled.Church,
         "moon" to Icons.Filled.DarkMode,
         "commute" to Icons.Filled.Commute,
+        "weight" to Icons.Filled.MonitorWeight,
+        "lungs" to Icons.Filled.Air,
+        "air" to Icons.Filled.Air,
+        "temp" to Icons.Filled.Thermostat,
+        "drop" to Icons.Filled.WaterDrop,
+        "fire" to Icons.Filled.LocalFireDepartment,
+        "stairs" to Icons.Filled.Stairs,
         "heart" to Icons.Filled.Favorite,
         "bar" to Icons.Filled.LocalBar,
         "bag" to Icons.Filled.ShoppingBag,

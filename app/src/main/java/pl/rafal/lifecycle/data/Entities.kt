@@ -155,3 +155,29 @@ data class StepBucket(
     val source: String,
     val steps: Long,
 )
+
+/**
+ * Pomiar zdrowotny z Health Connect. Dla tętna (agregat godzinowy) value = średnia, v2 = min, v3 = max;
+ * dla ciśnienia value = skurczowe, v2 = rozkurczowe; dla sum dziennych time = początek dnia.
+ */
+@Entity(tableName = "health", primaryKeys = ["metric", "time"])
+data class HealthSample(
+    val metric: String,
+    val time: Long,
+    val value: Double,
+    val v2: Double? = null,
+    val v3: Double? = null,
+)
+
+/** Zdarzenie z innej aplikacji (plik „wymiana-zdarzen”): wiatry, kliknięcia Kreski, epizody AF. */
+@Entity(tableName = "ext_events", indices = [Index("source"), Index("start")])
+data class ExtEvent(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val source: String,
+    /** Np. nazwa licznika w Kresce. */
+    val label: String,
+    val type: String,
+    val start: Long,
+    val end: Long? = null,
+    val value: Double = 1.0,
+)

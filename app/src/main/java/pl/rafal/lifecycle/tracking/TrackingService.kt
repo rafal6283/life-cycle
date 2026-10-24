@@ -301,6 +301,7 @@ class WatchdogWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
         safe("Wykrywanie snu") { SleepDetector.run(ctx) }
         safe("Import treningów") { WorkoutImporter.run(ctx) }
         safe("Import kroków") { StepsImporter.run(ctx) }
+        safe("Pomiary zdrowotne") { HealthSync.run(ctx) }
         safe("Sprawdzanie celów") { GoalChecker.run(ctx) }
         safe("Podsumowanie tygodnia") { WeeklySummary.maybeNotify(ctx) }
         safe("Kopia zapasowa") { Backup.autoBackup(ctx) }

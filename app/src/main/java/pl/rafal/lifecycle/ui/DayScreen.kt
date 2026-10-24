@@ -65,7 +65,7 @@ private sealed interface TimelineRow {
 }
 
 @Composable
-fun DayScreen() {
+fun DayScreen(healthNav: () -> Unit = {}) {
     var periodIdx by rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
     if (periodIdx != 0) {
         PeriodDonutScreen(periodIdx) { periodIdx = it }
@@ -238,6 +238,10 @@ fun DayScreen() {
             item {
                 Spacer(Modifier.height(10.dp))
                 StepsCard(stepsTotal, stepHours, stepGoal) { editStepGoal = true }
+            }
+            item {
+                Spacer(Modifier.height(10.dp))
+                HealthTodayCard(day) { healthNav() }
             }
 
             if (goalProgress.isNotEmpty()) {

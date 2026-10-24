@@ -72,6 +72,47 @@ interface StepDao {
 }
 
 @Dao
+interface HealthDao {
+    @Query("SELECT * FROM health WHERE metric = :metric AND time >= :from AND time < :to ORDER BY time")
+    fun observe(metric: String, from: Long, to: Long): Flow<List<HealthSample>>
+
+    @Query("SELECT * FROM health WHERE time >= :from AND time < :to ORDER BY time")
+    fun observeAll(from: Long, to: Long): Flow<List<HealthSample>>
+
+    @Query("SELECT * FROM health WHERE metric = :metric ORDER BY time DESC LIMIT 1")
+    suspend fun latest(metric: String): HealthSample?
+
+    @Query("DELETE FROM health WHERE metric = :metric AND time >= :from AND time < :to")
+    suspend fun deleteRange(metric: String, from: Long, to: Long)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(list: List<HealthSample>)
+}
+
+@Dao
+interface ExtDao {
+    @Query("SELECT * FROM ext_events WHERE start >= :from AND start < :to ORDER BY start")
+    fun observe(from: Long, to: Long): Flow<List<ExtEvent>>
+
+    @Query("SELECT * FROM ext_events ORDER BY start")
+    suspend fun all(): List<ExtEvent>
+
+    @Query("SELECT source, label, COUNT(*) AS n, MAX(start) AS last FROM ext_events GROUP BY source, label")
+    fun observeSources(): Flow<List<ExtSourceInfo>>
+
+    @Query("DELETE FROM ext_events WHERE source = :source AND label = :label")
+    suspend fun deleteSource(source: String, label: String)
+
+    @Query("DELETE FROM ext_events")
+    suspend fun deleteAll()
+
+    @Insert
+    suspend fun insertAll(list: List<ExtEvent>)
+}
+
+data class ExtSourceInfo(val source: String, val label: String, val n: Int, val last: Long)
+
+@Dao
 interface GoalDao {
     @Query("SELECT * FROM goals ORDER BY id")
     fun observeAll(): Flow<List<Goal>>
@@ -216,8 +257,9 @@ interface ScreenOffDao {
 }
 
 @Database(
-    entities = [Category::class, Place::class, Entry::class, LocationSample::class, ScreenOff::class, Goal::class, StepBucket::class],
-    version = 3,
+    entities = [Category::class, Place::class, Entry::class, LocationSample::class, ScreenOff::class, Goal::class, StepBucket::class,
+        HealthSample::class, ExtEvent::class],
+    version = 4,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -228,6 +270,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun screenOff(): ScreenOffDao
     abstract fun goals(): GoalDao
     abstract fun steps(): StepDao
+    abstract fun health(): HealthDao
+    abstract fun ext(): ExtDao
 
     companion object {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -251,9 +295,25 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `health` (`metric` TEXT NOT NULL, `time` INTEGER NOT NULL, " +
+                        "`value` REAL NOT NULL, `v2` REAL, `v3` REAL, PRIMARY KEY(`metric`, `time`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `ext_events` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`source` TEXT NOT NULL, `label` TEXT NOT NULL, `type` TEXT NOT NULL, `start` INTEGER NOT NULL, " +
+                        "`end` INTEGER, `value` REAL NOT NULL)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_ext_events_source` ON `ext_events` (`source`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_ext_events_start` ON `ext_events` (`start`)")
+            }
+        }
+
         fun build(ctx: Context): AppDatabase =
             Room.databaseBuilder(ctx, AppDatabase::class.java, "lifecycle.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
     }
 }

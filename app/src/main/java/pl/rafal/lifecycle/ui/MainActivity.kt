@@ -32,6 +32,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
+import kotlinx.coroutines.launch
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.CheckCircle
@@ -86,7 +88,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val startTab = intent?.getStringExtra("tab")
+        val startTab = if (handleImport(intent)) "health" else intent?.getStringExtra("tab")
         setContent {
             LifeTheme {
                 Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
@@ -95,11 +97,38 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleImport(intent)
+    }
+
+    /** Plik „wymiana-zdarzen” udostępniony z Nocnego licznika, Kreski lub Polar EKG. */
+    private fun handleImport(i: Intent?): Boolean {
+        val uri: Uri = when (i?.action) {
+            Intent.ACTION_SEND -> if (Build.VERSION.SDK_INT >= 33) {
+                i.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION") i.getParcelableExtra(Intent.EXTRA_STREAM)
+            }
+            Intent.ACTION_VIEW -> i.data
+            else -> null
+        } ?: return false
+        val app = applicationContext as pl.rafal.lifecycle.LifeApp
+        app.appScope.launch {
+            val msg = pl.rafal.lifecycle.domain.ExchangeImport.importUri(app, uri)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                android.widget.Toast.makeText(app, msg, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+        return true
+    }
 }
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     DAY("Pierścień", Icons.Filled.DonutLarge),
     STATS("Trendy", Icons.Filled.BarChart),
+    HEALTH("Zdrowie", Icons.Filled.Favorite),
     PLACES("Miejsca", Icons.Filled.Place),
     SETTINGS("Ustawienia", Icons.Filled.Settings),
 }
@@ -135,6 +164,10 @@ fun AppRoot(startTab: String?) {
             } catch (_: Exception) {
             }
             try {
+                pl.rafal.lifecycle.tracking.HealthSync.run(ctx)
+            } catch (_: Exception) {
+            }
+            try {
                 pl.rafal.lifecycle.widget.DobaWidget.updateAll(ctx)
             } catch (_: Exception) {
             }
@@ -145,6 +178,7 @@ fun AppRoot(startTab: String?) {
         mutableStateOf(
             when (startTab) {
                 "places" -> Tab.PLACES
+                "health" -> Tab.HEALTH
                 "stats" -> Tab.STATS
                 else -> Tab.DAY
             }
@@ -178,9 +212,10 @@ fun AppRoot(startTab: String?) {
                 sub == "categories" -> CategoriesScreen(onBack = { sub = null })
                 sub == "permissions" -> PermissionsScreen(onBack = { sub = null })
                 sub == "goals" -> GoalsScreen(onBack = { sub = null })
-                tab == Tab.DAY -> DayScreen()
+                tab == Tab.DAY -> DayScreen { tab = Tab.HEALTH }
                 tab == Tab.STATS -> StatsScreen()
                 tab == Tab.PLACES -> PlacesScreen()
+                tab == Tab.HEALTH -> HealthScreen()
                 else -> SettingsScreen(onOpen = { sub = it })
             }
         }
@@ -280,7 +315,7 @@ fun PermissionList(modifier: Modifier = Modifier) {
             enabled = hcStatus != HealthConnectClient.SDK_UNAVAILABLE,
         ) {
             if (hcStatus == HealthConnectClient.SDK_AVAILABLE) {
-                hcLauncher.launch(HealthConnectHelper.PERMISSIONS)
+                hcLauncher.launch(HealthConnectHelper.PERMISSIONS + pl.rafal.lifecycle.tracking.HealthSync.PERMISSIONS)
             } else {
                 open(
                     Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.google.android.apps.healthdata"))

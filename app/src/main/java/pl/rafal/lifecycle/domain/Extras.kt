@@ -394,6 +394,12 @@ object Backup {
                 put(JSONObject().put("h", b.hourStart).put("s", b.source).put("n", b.steps))
             }
         })
+        root.put("ext", JSONArray().apply {
+            db.ext().all().forEach { x ->
+                put(JSONObject().put("s", x.source).put("l", x.label).put("t", x.type).put("a", x.start)
+                    .put("b", x.end ?: JSONObject.NULL).put("v", x.value))
+            }
+        })
         root.put("goals", JSONArray().apply {
             db.goals().getAll().forEach { g ->
                 put(JSONObject().put("id", g.id).put("categoryId", g.categoryId).put("type", g.type)
@@ -452,6 +458,17 @@ object Backup {
                 )
             }
             db.entries().insertAll(list)
+            val ext = root.optJSONArray("ext")
+            if (ext != null) {
+                db.ext().deleteAll()
+                db.ext().insertAll((0 until ext.length()).map { i ->
+                    val x = ext.getJSONObject(i)
+                    pl.rafal.lifecycle.data.ExtEvent(
+                        source = x.getString("s"), label = x.getString("l"), type = x.getString("t"),
+                        start = x.getLong("a"), end = x.optLongOrNull("b"), value = x.optDouble("v", 1.0),
+                    )
+                })
+            }
             db.steps().deleteAll()
             db.steps().upsert((0 until steps.length()).map { i ->
                 val b = steps.getJSONObject(i)
