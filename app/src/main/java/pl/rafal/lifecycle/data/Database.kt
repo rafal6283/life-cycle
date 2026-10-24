@@ -79,6 +79,9 @@ interface HealthDao {
     @Query("SELECT * FROM health WHERE time >= :from AND time < :to ORDER BY time")
     fun observeAll(from: Long, to: Long): Flow<List<HealthSample>>
 
+    @Query("SELECT * FROM health WHERE metric = :metric AND time >= :from AND time < :to ORDER BY time")
+    suspend fun range(metric: String, from: Long, to: Long): List<HealthSample>
+
     @Query("SELECT * FROM health WHERE metric = :metric ORDER BY time DESC LIMIT 1")
     suspend fun latest(metric: String): HealthSample?
 

@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -399,11 +400,14 @@ private fun FullDialog(title: String, onDismiss: () -> Unit, content: @Composabl
     }
 }
 
-private val ranges = listOf(7 to "7 dni", 30 to "30 dni", 90 to "90 dni", 365 to "Rok")
+private val ranges = listOf(1 to "Dzień", 7 to "7 dni", 30 to "30 dni", 90 to "90 dni", 365 to "Rok")
 
 @Composable
 private fun RangeChips(days: Int, onChange: (Int) -> Unit) {
-    Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(
+        Modifier.padding(horizontal = 16.dp).horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         ranges.forEach { (d, l) -> FilterChip(days == d, { onChange(d) }, { Text(l) }) }
     }
 }
@@ -411,7 +415,9 @@ private fun RangeChips(days: Int, onChange: (Int) -> Unit) {
 @Composable
 private fun MetricDetailDialog(m: Metric, onDismiss: () -> Unit) {
     val db = LifeApp.instance.db
-    var days by remember { mutableIntStateOf(30) }
+    var days by remember { mutableIntStateOf(1) }
+    var day by remember { mutableStateOf(LocalDate.now()) }
+    var picked by remember { mutableStateOf<LocalDate?>(null) }
     val today = LocalDate.now()
     val from = Fmt.dayStart(today.minusDays(days - 1L))
     val samples by remember(m, from) { db.health().observe(m.key, from, Fmt.dayStart(today.plusDays(1))) }
@@ -421,15 +427,27 @@ private fun MetricDetailDialog(m: Metric, onDismiss: () -> Unit) {
 
     FullDialog(m.label, onDismiss) {
         Column(Modifier.verticalScroll(rememberScrollState())) {
-            RangeChips(days) { days = it }
+            RangeChips(days) { days = it; picked = null }
             Spacer(Modifier.height(8.dp))
+            if (days == 1) {
+                MetricDayView(m, day) { day = it }
+                Spacer(Modifier.height(24.dp))
+                return@Column
+            }
             TrendCard {
                 if (daily.isEmpty()) {
                     Text("Brak pomiarów w tym okresie.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
-                    MetricChart(m, daily, dayKeys(today, days), color, days)
+                    MetricChart(m, daily, dayKeys(today, days), color, days) { picked = it }
+                    val p = picked
+                    if (p != null) {
+                        androidx.compose.material3.TextButton(onClick = { day = p; days = 1; picked = null }) {
+                            Text("Pokaż szczegóły dnia ${Fmt.dayTitle(p).lowercase()} →")
+                        }
+                    }
                 }
             }
+            HourProfileCard(m, samples, days, from, Fmt.dayStart(today.plusDays(1)))
             if (daily.isNotEmpty()) {
                 Spacer(Modifier.height(10.dp))
                 val vals = daily.map { it.value }
@@ -492,9 +510,14 @@ private fun StatBox(label: String, value: String, modifier: Modifier) {
 
 /** Wykres dzienny: słupki (sumy) albo linia z pasmem min–max; dotyk pokazuje wartość. */
 @Composable
-private fun MetricChart(m: Metric, daily: List<DayValue>, days: List<LocalDate>, color: Color, key: Any) {
+private fun MetricChart(
+    m: Metric, daily: List<DayValue>, days: List<LocalDate>, color: Color, key: Any,
+    onPick: (LocalDate?) -> Unit = {},
+) {
     val t = entrance(key)
     val sel = rememberSelection(key)
+    val pick by androidx.compose.runtime.rememberUpdatedState(onPick)
+    LaunchedEffect(sel.index) { pick(days.getOrNull(sel.index)) }
     val measurer = rememberTextMeasurer()
     val style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
     val tipStyle = MaterialTheme.typography.labelMedium.copy(color = MaterialTheme.colorScheme.surface)
@@ -591,8 +614,10 @@ private fun MetricChart(m: Metric, daily: List<DayValue>, days: List<LocalDate>,
 private fun ExtDetailDialog(source: String, label: String, onDismiss: () -> Unit) {
     val db = LifeApp.instance.db
     var days by remember { mutableIntStateOf(30) }
+    var day by remember { mutableStateOf(LocalDate.now()) }
+    var picked by remember { mutableStateOf<LocalDate?>(null) }
     val today = LocalDate.now()
-    val ext by remember(days) { db.ext().observe(Fmt.dayStart(today.minusDays(days + 1L)), Fmt.dayStart(today.plusDays(1))) }
+    val ext by remember(days) { db.ext().observe(Fmt.dayStart(today.minusDays(maxOf(days, 2) + 1L)), Fmt.dayStart(today.plusDays(1))) }
         .collectAsState(initial = emptyList())
     val counts = remember(ext) { ExchangeImport.dailyCounts(ext, source, label) }
     val keys = dayKeys(today, days)
@@ -611,12 +636,25 @@ private fun ExtDetailDialog(source: String, label: String, onDismiss: () -> Unit
     }
     FullDialog(ExchangeImport.sourceLabel(source, label), onDismiss) {
         Column(Modifier.verticalScroll(rememberScrollState())) {
-            RangeChips(days) { days = it }
+            RangeChips(days) { days = it; picked = null }
             Spacer(Modifier.height(8.dp))
+            if (days == 1) {
+                ExtDayView(source, label, day, color) { day = it }
+                Spacer(Modifier.height(24.dp))
+                return@Column
+            }
             val metric = Metric.FLOORS // tylko do formatowania liczb całkowitych
             TrendCard {
                 if (daily.isEmpty()) Text("Brak danych w tym okresie.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                else MetricChartCounts(daily, keys, color, days)
+                else {
+                    MetricChart(Metric.FLOORS, daily, keys, color, days) { picked = it }
+                    val p = picked
+                    if (p != null) {
+                        androidx.compose.material3.TextButton(onClick = { day = p; days = 1; picked = null }) {
+                            Text("Pokaż ${if (source == ExchangeImport.SRC_NIGHT) "noc" else "dzień"} ${Fmt.dayTitle(p).lowercase()} →")
+                        }
+                    }
+                }
             }
             if (daily.isNotEmpty()) {
                 Spacer(Modifier.height(10.dp))
