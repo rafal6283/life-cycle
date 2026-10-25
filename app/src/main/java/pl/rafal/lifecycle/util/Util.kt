@@ -125,6 +125,11 @@ class Prefs(ctx: Context) {
         get() = p.getLong("lastBackupAt", 0L)
         set(v) = p.edit().putLong("lastBackupAt", v).apply()
 
+    /** Wzrost do BMI, gdy nie ma go w Health Connect (0 = nie podano). */
+    var heightCm: Int
+        get() = p.getInt("heightCm", 0)
+        set(v) = p.edit().putInt("heightCm", v).apply()
+
     var commutes: Boolean
         get() = p.getBoolean("commutes", true)
         set(v) = p.edit().putBoolean("commutes", v).apply()

@@ -15,6 +15,14 @@ import java.util.Locale
 /** Jak łączyć kilka pomiarów z jednego dnia. */
 enum class DayAgg { AVG, LAST, SUM, MINMAX }
 
+/** Grupy kart w zakładce Zdrowie. */
+enum class MetricGroup(val label: String) {
+    HEART("Serce"),
+    BODY("Skład ciała"),
+    VITALS("Oddech, temperatura i krew"),
+    ACTIVITY("Aktywność"),
+}
+
 enum class Metric(
     val key: String,
     val label: String,
@@ -23,22 +31,33 @@ enum class Metric(
     val color: Long,
     val decimals: Int,
     val agg: DayAgg,
+    val group: MetricGroup,
+    /** Liczone w Dobie z innych pomiarów (nie pobierane wprost z Health Connect). */
+    val derived: Boolean = false,
 ) {
-    HR("hr", "Tętno", "bpm", "heart", 0xFFFF3B30, 0, DayAgg.MINMAX),
-    RESTING_HR("rhr", "Tętno spoczynkowe", "bpm", "heart", 0xFFE8573F, 0, DayAgg.AVG),
-    HRV("hrv", "HRV (RMSSD)", "ms", "heart", 0xFFBF5AF2, 0, DayAgg.AVG),
-    BP("bp", "Ciśnienie", "mmHg", "health", 0xFFFF2D55, 0, DayAgg.AVG),
-    WEIGHT("weight", "Waga", "kg", "weight", 0xFF30B0C7, 1, DayAgg.LAST),
-    BODY_FAT("fat", "Tkanka tłuszczowa", "%", "weight", 0xFFFF9F0A, 1, DayAgg.LAST),
-    SPO2("spo2", "Saturacja (SpO₂)", "%", "lungs", 0xFF007AFF, 0, DayAgg.AVG),
-    RESP("resp", "Oddechy", "/min", "lungs", 0xFF64D2FF, 1, DayAgg.AVG),
-    TEMP("temp", "Temperatura ciała", "°C", "temp", 0xFFFF6B22, 1, DayAgg.AVG),
-    GLUCOSE("glucose", "Glukoza", "mg/dl", "drop", 0xFFAF52DE, 0, DayAgg.AVG),
-    VO2("vo2", "VO₂max", "ml/kg/min", "run", 0xFF34C759, 1, DayAgg.LAST),
-    ACTIVE_KCAL("akcal", "Kalorie aktywne", "kcal", "fire", 0xFFFF9500, 0, DayAgg.SUM),
-    TOTAL_KCAL("tkcal", "Kalorie łącznie", "kcal", "fire", 0xFFFFCC00, 0, DayAgg.SUM),
-    FLOORS("floors", "Piętra", "", "stairs", 0xFF8E8E93, 0, DayAgg.SUM),
-    WATER("water", "Woda", "l", "drop", 0xFF5AC8FA, 1, DayAgg.SUM);
+    HR("hr", "Tętno", "bpm", "heart", 0xFFFF3B30, 0, DayAgg.MINMAX, MetricGroup.HEART),
+    RESTING_HR("rhr", "Tętno spoczynkowe", "bpm", "heart", 0xFFE8573F, 0, DayAgg.AVG, MetricGroup.HEART),
+    HRV("hrv", "HRV (RMSSD)", "ms", "heart", 0xFFBF5AF2, 0, DayAgg.AVG, MetricGroup.HEART),
+    BP("bp", "Ciśnienie", "mmHg", "health", 0xFFFF2D55, 0, DayAgg.AVG, MetricGroup.HEART),
+    WEIGHT("weight", "Waga", "kg", "weight", 0xFF30B0C7, 2, DayAgg.LAST, MetricGroup.BODY),
+    BMI("bmi", "BMI", "", "weight", 0xFF4DB6AC, 1, DayAgg.LAST, MetricGroup.BODY, derived = true),
+    BODY_FAT("fat", "Tkanka tłuszczowa", "%", "weight", 0xFFFF9F0A, 1, DayAgg.LAST, MetricGroup.BODY),
+    FAT_MASS("fatmass", "Masa tłuszczowa", "kg", "weight", 0xFFFFB340, 1, DayAgg.LAST, MetricGroup.BODY, derived = true),
+    LEAN_MASS("lean", "Beztłuszczowa masa ciała", "kg", "body", 0xFF34C759, 1, DayAgg.LAST, MetricGroup.BODY),
+    WATER_PCT("waterpct", "Woda w organizmie", "%", "drop", 0xFF5AC8FA, 1, DayAgg.LAST, MetricGroup.BODY, derived = true),
+    WATER_MASS("watermass", "Masa wody", "kg", "drop", 0xFF64D2FF, 1, DayAgg.LAST, MetricGroup.BODY),
+    BONE_MASS("bone", "Masa kostna", "kg", "bone", 0xFF8E8E93, 1, DayAgg.LAST, MetricGroup.BODY),
+    BMR("bmr", "Podstawowa przemiana materii (BMR)", "kcal", "fire", 0xFFFF6B22, 0, DayAgg.LAST, MetricGroup.BODY),
+    HEIGHT("height", "Wzrost", "cm", "height", 0xFF8E44AD, 0, DayAgg.LAST, MetricGroup.BODY),
+    SPO2("spo2", "Saturacja (SpO₂)", "%", "lungs", 0xFF007AFF, 0, DayAgg.AVG, MetricGroup.VITALS),
+    RESP("resp", "Oddechy", "/min", "lungs", 0xFF64D2FF, 1, DayAgg.AVG, MetricGroup.VITALS),
+    TEMP("temp", "Temperatura ciała", "°C", "temp", 0xFFFF6B22, 1, DayAgg.AVG, MetricGroup.VITALS),
+    GLUCOSE("glucose", "Glukoza", "mg/dl", "drop", 0xFFAF52DE, 0, DayAgg.AVG, MetricGroup.VITALS),
+    VO2("vo2", "VO₂max", "ml/kg/min", "run", 0xFF34C759, 1, DayAgg.LAST, MetricGroup.ACTIVITY),
+    ACTIVE_KCAL("akcal", "Kalorie aktywne", "kcal", "fire", 0xFFFF9500, 0, DayAgg.SUM, MetricGroup.ACTIVITY),
+    TOTAL_KCAL("tkcal", "Kalorie łącznie", "kcal", "fire", 0xFFFFCC00, 0, DayAgg.SUM, MetricGroup.ACTIVITY),
+    FLOORS("floors", "Piętra", "", "stairs", 0xFF8E8E93, 0, DayAgg.SUM, MetricGroup.ACTIVITY),
+    WATER("water", "Woda (wypita)", "l", "drop", 0xFF5AC8FA, 1, DayAgg.SUM, MetricGroup.ACTIVITY);
 
     fun format(v: Double): String = String.format(Fmt.PL, "%.${decimals}f", v)
 

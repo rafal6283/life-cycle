@@ -95,7 +95,10 @@ fun HealthScreen() {
     val today = LocalDate.now()
     val from = Fmt.dayStart(today.minusDays(29))
     val to = Fmt.dayStart(today.plusDays(1))
-    val samples by remember(from) { db.health().observeAll(from, to) }.collectAsState(initial = null)
+    // Rok wstecz: rzadkie pomiary (waga, skład ciała) też mają swoją kartę.
+    val yearFrom = Fmt.dayStart(today.minusDays(365))
+    val samples by remember(yearFrom) { db.health().observeAll(yearFrom, to) }.collectAsState(initial = null)
+    var heightDialog by remember { mutableStateOf(false) }
     val hiddenExt by pl.rafal.lifecycle.domain.ExtVisibility.hidden.collectAsState()
     val extAll by remember(from) { db.ext().observe(Fmt.dayStart(today.minusDays(31)), to) }.collectAsState(initial = emptyList())
     val ext = remember(extAll, hiddenExt) { pl.rafal.lifecycle.domain.ExtVisibility.filter(extAll, hiddenExt) }
@@ -112,6 +115,7 @@ fun HealthScreen() {
     val hcStatus = remember(tick) { HealthConnectHelper.status(ctx) }
     val granted by produceState<Set<String>>(emptySet(), tick) { value = HealthConnectHelper.grantedSet(ctx) }
     val missing = remember(granted) { HealthSync.PERMISSIONS.filter { it !in granted && it != HealthSync.HISTORY } }
+    val noneGranted = missing.size >= HealthSync.PERMISSIONS.size - 1
 
     fun sync(full: Boolean) {
         scope.launch {
@@ -151,7 +155,7 @@ fun HealthScreen() {
             }
         }
 
-        if (hcStatus == HealthConnectClient.SDK_AVAILABLE && missing.isNotEmpty()) {
+        if (hcStatus == HealthConnectClient.SDK_AVAILABLE && noneGranted) {
             item {
                 Column(
                     Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp))
@@ -159,8 +163,8 @@ fun HealthScreen() {
                 ) {
                     Text("Połącz z Health Connect", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
-                        "Tętno, ciśnienie, waga, saturacja, kalorie i inne pomiary z zegarka, wagi czy ciśnieniomierza. " +
-                            "Brakuje zgód: ${missing.size}. Zaznacz te, które chcesz widzieć w Dobie.",
+                        "Tętno, ciśnienie, waga i skład ciała (np. z wagi Fitdays), saturacja, kalorie i inne pomiary " +
+                            "z zegarka, wagi czy ciśnieniomierza. Zaznacz te, które masz — Doba pokaże tylko parametry z danymi.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Spacer(Modifier.height(8.dp))
@@ -180,10 +184,10 @@ fun HealthScreen() {
         }
 
         val withData = Metric.entries.filter { byMetric[it.key].orEmpty().isNotEmpty() }
-        if (samples != null && withData.isEmpty() && missing.size < HealthSync.PERMISSIONS.size - 1) {
+        if (samples != null && withData.isEmpty() && !noneGranted) {
             item {
                 Text(
-                    "Brak pomiarów z ostatnich 30 dni. Jeśli zegarek lub waga zapisują dane do Health Connect, " +
+                    "Brak pomiarów z ostatniego roku. Jeśli zegarek lub waga zapisują dane do Health Connect, " +
                         "dotknij ikony synchronizacji.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -191,11 +195,41 @@ fun HealthScreen() {
                 )
             }
         }
-        if (withData.isNotEmpty()) {
-            item { SectionTitle("Pomiary · ostatnie 30 dni") }
-            items(withData, key = { it.key }) { m ->
+        val needHeight = Metric.WEIGHT in withData && Metric.HEIGHT !in withData && Metric.BMI !in withData
+        pl.rafal.lifecycle.domain.MetricGroup.entries.forEach { g ->
+            val inGroup = withData.filter { it.group == g }
+            if (inGroup.isEmpty()) return@forEach
+            item(key = "g_" + g.name) { SectionTitle(g.label) }
+            items(inGroup, key = { it.key }) { m ->
                 MetricCard(m, byMetric[m.key].orEmpty(), today) { detail = m }
                 Spacer(Modifier.height(10.dp))
+            }
+            if (g == pl.rafal.lifecycle.domain.MetricGroup.BODY && needHeight) {
+                item(key = "height") {
+                    Row(
+                        Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                            .clickable { heightDialog = true }.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Podaj wzrost, aby Doba liczyła BMI", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        Text("Ustaw", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                }
+            }
+        }
+        if (hcStatus == HealthConnectClient.SDK_AVAILABLE && !noneGranted) {
+            item(key = "perms") {
+                androidx.compose.material3.TextButton(
+                    onClick = { permLauncher.launch(HealthSync.PERMISSIONS + HealthConnectHelper.PERMISSIONS) },
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                ) {
+                    Text(
+                        if (missing.isEmpty()) "Zgody Health Connect: wszystkie nadane"
+                        else "Zgody Health Connect · nieudostępnione typy danych: ${missing.size}",
+                    )
+                }
             }
         }
 
@@ -231,6 +265,11 @@ fun HealthScreen() {
     }
 
     detail?.let { m -> MetricDetailDialog(m) { detail = null } }
+    if (heightDialog) HeightDialog(onDismiss = { heightDialog = false }) { cm ->
+        pl.rafal.lifecycle.util.Prefs(ctx).heightCm = cm
+        heightDialog = false
+        scope.launch { withContext(Dispatchers.IO) { HealthSync.deriveBody(ctx) } }
+    }
     extDetail?.let { (src, label) -> ExtDetailDialog(src, label) { extDetail = null } }
 }
 
@@ -241,6 +280,10 @@ private fun MetricCard(m: Metric, samples: List<HealthSample>, today: LocalDate,
     val latest = samples.maxByOrNull { it.time } ?: return
     val daily = remember(samples) { HealthAgg.daily(m, samples) }
     val color = Color(m.color)
+    val sum = m.agg == pl.rafal.lifecycle.domain.DayAgg.SUM
+    // Gęste dane: 30 ostatnich dni; rzadkie (np. waga raz w tygodniu): ostatnie 12 pomiarów.
+    val recent30 = daily.count { it.day > today.minusDays(30) }
+    val sparkDays = if (recent30 >= 5 || sum) dayKeys(today, 30) else daily.takeLast(12).map { it.day }
     Column(
         Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp))
             .background(MaterialTheme.colorScheme.surface).clickable(onClick = onClick).padding(14.dp)
@@ -250,9 +293,15 @@ private fun MetricCard(m: Metric, samples: List<HealthSample>, today: LocalDate,
                 Icon(CatIcons.get(m.icon), null, tint = Color.White, modifier = Modifier.size(18.dp))
             }
             Spacer(Modifier.width(10.dp))
-            Text(m.label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Column(Modifier.weight(1f)) {
+                Text(m.label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                if (m.derived) {
+                    Text("wyliczane w Dobie", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             Text(
-                if (m.agg == pl.rafal.lifecycle.domain.DayAgg.SUM) "dziś" else Fmt.dateTime(latest.time),
+                if (sum) (if (daily.lastOrNull()?.day == today) "dziś" else daily.lastOrNull()?.let { Fmt.dayTitle(it.day) } ?: "")
+                else Fmt.dateTime(latest.time),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -260,7 +309,7 @@ private fun MetricCard(m: Metric, samples: List<HealthSample>, today: LocalDate,
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.Bottom) {
             val main = when (m.agg) {
-                pl.rafal.lifecycle.domain.DayAgg.SUM -> daily.lastOrNull { it.day == today }?.let { m.format(it.value) } ?: "0"
+                pl.rafal.lifecycle.domain.DayAgg.SUM -> daily.lastOrNull()?.let { m.format(it.value) } ?: "0"
                 pl.rafal.lifecycle.domain.DayAgg.MINMAX -> daily.lastOrNull()?.let { m.format(it.value) } ?: "—"
                 else -> if (m == Metric.BP) "${m.format(latest.value)}/${m.format(latest.v2 ?: 0.0)}" else m.format(latest.value)
             }
@@ -281,11 +330,55 @@ private fun MetricCard(m: Metric, samples: List<HealthSample>, today: LocalDate,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            } else if (m.agg == pl.rafal.lifecycle.domain.DayAgg.LAST) {
+                // Zmiana od poprzedniego pomiaru (jak w aplikacji wagi)
+                val prev = samples.filter { it.time < latest.time }.maxByOrNull { it.time }
+                if (prev != null) {
+                    val d = latest.value - prev.value
+                    val hb = pl.rafal.lifecycle.domain.HealthTrends.higherIsBetter(m)
+                    val col = when {
+                        hb == null || kotlin.math.abs(d) < Math.pow(10.0, -m.decimals.toDouble()) -> MaterialTheme.colorScheme.onSurfaceVariant
+                        (d > 0) == hb -> Color(0xFF34C759)
+                        else -> Color(0xFFFF3B30)
+                    }
+                    Text(
+                        (if (d >= 0) "▲ " else "▼ ") + m.format(kotlin.math.abs(d)) + " ${m.unit} od ${Fmt.date(prev.time)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = col,
+                    )
+                }
             }
         }
         Spacer(Modifier.height(6.dp))
-        Sparkline(daily, dayKeys(today, 30), color, m == Metric.BP, m.agg == pl.rafal.lifecycle.domain.DayAgg.SUM)
+        Sparkline(daily, sparkDays, color, m == Metric.BP, sum)
     }
+}
+
+@Composable
+private fun HeightDialog(onDismiss: () -> Unit, onSave: (Int) -> Unit) {
+    var text by remember { mutableStateOf("") }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Wzrost") },
+        text = {
+            androidx.compose.material3.OutlinedTextField(
+                value = text,
+                onValueChange = { text = it.filter { c -> c.isDigit() }.take(3) },
+                label = { Text("cm") },
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
+                ),
+            )
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(
+                enabled = (text.toIntOrNull() ?: 0) in 100..230,
+                onClick = { onSave(text.toInt()) },
+            ) { Text("Zapisz") }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Anuluj") } },
+    )
 }
 
 @Composable
@@ -421,7 +514,7 @@ private fun RangeChips(days: Int, onChange: (Int) -> Unit) {
 @Composable
 private fun MetricDetailDialog(m: Metric, onDismiss: () -> Unit) {
     val db = LifeApp.instance.db
-    var days by remember { mutableIntStateOf(1) }
+    var days by remember { mutableIntStateOf(if (m.agg == pl.rafal.lifecycle.domain.DayAgg.LAST) 90 else 1) }
     var day by remember { mutableStateOf(LocalDate.now()) }
     var picked by remember { mutableStateOf<LocalDate?>(null) }
     val today = LocalDate.now()

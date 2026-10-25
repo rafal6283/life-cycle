@@ -55,7 +55,8 @@ object HealthTrends {
     /** Czy wzrost parametru to dobra wiadomość (null = obojętne). */
     fun higherIsBetter(m: Metric): Boolean? = when (m) {
         Metric.HRV, Metric.VO2, Metric.ACTIVE_KCAL, Metric.FLOORS, Metric.WATER -> true
-        Metric.RESTING_HR, Metric.BP, Metric.BODY_FAT -> false
+        Metric.RESTING_HR, Metric.BP, Metric.BODY_FAT, Metric.FAT_MASS -> false
+        Metric.LEAN_MASS -> true
         else -> null
     }
 

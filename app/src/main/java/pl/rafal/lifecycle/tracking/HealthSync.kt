@@ -5,7 +5,12 @@ import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
+import androidx.health.connect.client.records.BasalMetabolicRateRecord
 import androidx.health.connect.client.records.BloodGlucoseRecord
+import androidx.health.connect.client.records.BodyWaterMassRecord
+import androidx.health.connect.client.records.BoneMassRecord
+import androidx.health.connect.client.records.HeightRecord
+import androidx.health.connect.client.records.LeanBodyMassRecord
 import androidx.health.connect.client.records.BloodPressureRecord
 import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.BodyTemperatureRecord
@@ -46,6 +51,11 @@ object HealthSync {
         Metric.BP to BloodPressureRecord::class,
         Metric.WEIGHT to WeightRecord::class,
         Metric.BODY_FAT to BodyFatRecord::class,
+        Metric.LEAN_MASS to LeanBodyMassRecord::class,
+        Metric.WATER_MASS to BodyWaterMassRecord::class,
+        Metric.BONE_MASS to BoneMassRecord::class,
+        Metric.BMR to BasalMetabolicRateRecord::class,
+        Metric.HEIGHT to HeightRecord::class,
         Metric.SPO2 to OxygenSaturationRecord::class,
         Metric.RESP to RespiratoryRateRecord::class,
         Metric.TEMP to BodyTemperatureRecord::class,
@@ -85,7 +95,42 @@ object HealthSync {
                 Log.w(TrackingService.TAG, "Health Connect: ${metric.key}", e)
             }
         }
+        try {
+            deriveBody(ctx)
+        } catch (e: Exception) {
+            Log.w(TrackingService.TAG, "Health Connect: wyliczenia składu ciała", e)
+        }
         return total
+    }
+
+    /**
+     * BMI, masa tłuszczowa i % wody — liczone przy każdym pomiarze wagi z pomiarów z tej samej chwili
+     * (waga Fitdays i podobne zapisują je razem) albo z tego samego dnia. Wzrost: z Health Connect lub z ustawień.
+     */
+    suspend fun deriveBody(ctx: Context) {
+        val db = (ctx.applicationContext as LifeApp).db
+        val now = System.currentTimeMillis()
+        val from = now - 400 * DAY
+        val weights = db.health().range(Metric.WEIGHT.key, from, now + DAY)
+        if (weights.isEmpty()) return
+        val fats = db.health().range(Metric.BODY_FAT.key, from, now + DAY)
+        val waters = db.health().range(Metric.WATER_MASS.key, from, now + DAY)
+        val heights = db.health().range(Metric.HEIGHT.key, 0L, now + DAY)
+        val prefHeight = pl.rafal.lifecycle.util.Prefs(ctx).heightCm
+        fun near(list: List<HealthSample>, t: Long): HealthSample? {
+            val best = list.minByOrNull { kotlin.math.abs(it.time - t) } ?: return null
+            return if (kotlin.math.abs(best.time - t) <= 10 * 60_000L || Fmt.toLocalDate(best.time) == Fmt.toLocalDate(t)) best else null
+        }
+        val out = ArrayList<HealthSample>()
+        for (w in weights) {
+            val h = heights.filter { it.time <= w.time + DAY }.maxByOrNull { it.time }?.value
+                ?: heights.lastOrNull()?.value ?: prefHeight.takeIf { it > 0 }?.toDouble()
+            if (h != null && h > 50) out += HealthSample(Metric.BMI.key, w.time, w.value / ((h / 100) * (h / 100)))
+            near(fats, w.time)?.let { out += HealthSample(Metric.FAT_MASS.key, w.time, w.value * it.value / 100) }
+            near(waters, w.time)?.let { out += HealthSample(Metric.WATER_PCT.key, w.time, it.value / w.value * 100) }
+        }
+        for (m in listOf(Metric.BMI, Metric.FAT_MASS, Metric.WATER_PCT)) db.health().deleteRange(m.key, from, now + DAY)
+        db.health().upsert(out)
     }
 
     private fun range(from: Long, to: Long) =
@@ -173,6 +218,17 @@ object HealthSync {
                 .map { HealthSample(k, it.time.toEpochMilli(), it.level.inMilligramsPerDeciliter) }
             Metric.VO2 -> readAll(client, Vo2MaxRecord::class, from, to)
                 .map { HealthSample(k, it.time.toEpochMilli(), it.vo2MillilitersPerMinuteKilogram) }
+            Metric.LEAN_MASS -> readAll(client, LeanBodyMassRecord::class, from, to)
+                .map { HealthSample(k, it.time.toEpochMilli(), it.mass.inKilograms) }
+            Metric.WATER_MASS -> readAll(client, BodyWaterMassRecord::class, from, to)
+                .map { HealthSample(k, it.time.toEpochMilli(), it.mass.inKilograms) }
+            Metric.BONE_MASS -> readAll(client, BoneMassRecord::class, from, to)
+                .map { HealthSample(k, it.time.toEpochMilli(), it.mass.inKilograms) }
+            Metric.BMR -> readAll(client, BasalMetabolicRateRecord::class, from, to)
+                .map { HealthSample(k, it.time.toEpochMilli(), it.basalMetabolicRate.inKilocaloriesPerDay) }
+            Metric.HEIGHT -> readAll(client, HeightRecord::class, from, to)
+                .map { HealthSample(k, it.time.toEpochMilli(), it.height.inMeters * 100) }
+            Metric.BMI, Metric.FAT_MASS, Metric.WATER_PCT -> emptyList()
         }.distinctBy { it.time }
     }
 }

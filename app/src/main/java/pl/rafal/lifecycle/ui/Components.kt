@@ -31,7 +31,10 @@ import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Accessibility
 import androidx.compose.material.icons.filled.Air
+import androidx.compose.material.icons.filled.Healing
+import androidx.compose.material.icons.filled.Height
 import androidx.compose.material.icons.filled.DonutLarge
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Place
@@ -167,6 +170,9 @@ object CatIcons {
         "weight" to Icons.Filled.MonitorWeight,
         "lungs" to Icons.Filled.Air,
         "air" to Icons.Filled.Air,
+        "body" to Icons.Filled.Accessibility,
+        "bone" to Icons.Filled.Healing,
+        "height" to Icons.Filled.Height,
         "donut" to Icons.Filled.DonutLarge,
         "bulb" to Icons.Filled.Lightbulb,
         "place" to Icons.Filled.Place,
