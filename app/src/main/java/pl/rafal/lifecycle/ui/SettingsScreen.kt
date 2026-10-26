@@ -96,6 +96,7 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
     var hcCheck by remember { mutableStateOf(false) }
     var stepGoalDialog by remember { mutableStateOf(false) }
     var stepGoalTick by remember { mutableIntStateOf(0) }
+    var stepFixDialog by remember { mutableStateOf(false) }
     var weekly by remember { mutableStateOf(prefs.weeklySummary) }
     var monthly by remember { mutableStateOf(prefs.monthlySummary) }
     var yearly by remember { mutableStateOf(prefs.yearlySummary) }
@@ -274,6 +275,8 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
                 HorizontalDivider(Modifier.padding(start = 16.dp))
                 NavRow("Telefon nie ma licznika kroków", "Kroki będą pobierane tylko z Health Connect") { }
             }
+            HorizontalDivider(Modifier.padding(start = 16.dp))
+            NavRow("Usuń zawyżone kroki z telefonu", "Starsze wersje Doby mogły dopisywać za dużo kroków") { stepFixDialog = true }
         }
 
         SectionTitle("Cele i podsumowania")
@@ -389,6 +392,32 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
 
     if (hcCheck) HealthConnectCheckDialog { hcCheck = false }
     if (stepGoalDialog) StepGoalDialog { stepGoalDialog = false; stepGoalTick++ }
+    if (stepFixDialog) {
+        AlertDialog(
+            onDismissRequest = { stepFixDialog = false },
+            title = { Text("Usunąć kroki z czujnika?") },
+            text = {
+                Text(
+                    "Usunę kroki policzone przez czujnik telefonu przed tą wersją Doby — błąd w liczeniu mógł je " +
+                        "kilkukrotnie zawyżyć. Kroki z Health Connect (Samsung Health, zegarek) zostaną i z nich " +
+                        "uzupełni się ostatni tydzień. Od teraz telefon liczy już poprawnie."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    stepFixDialog = false
+                    scope.launch {
+                        withContext(Dispatchers.IO) {
+                            val s = pl.rafal.lifecycle.tracking.StepsRecorder
+                            s.clearPhoneBefore(ctx, s.fixedSince(ctx))
+                        }
+                        Toast.makeText(ctx, "Usunięto stare kroki z telefonu", Toast.LENGTH_SHORT).show()
+                    }
+                }) { Text("Usuń") }
+            },
+            dismissButton = { TextButton(onClick = { stepFixDialog = false }) { Text("Anuluj") } },
+        )
+    }
 
     summaryText?.let { text ->
         AlertDialog(

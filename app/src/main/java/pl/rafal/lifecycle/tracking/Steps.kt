@@ -50,21 +50,95 @@ object Steps {
     }
 }
 
-/** Zamienia skumulowany licznik kroków z czujnika telefonu na kroki w godzinach. */
+/**
+ * Zamienia skumulowany licznik kroków z czujnika telefonu na kroki w godzinach.
+ *
+ * Czujnik oddaje sumę kroków od uruchomienia telefonu. Zdarzenia przychodzą w paczkach i były
+ * przetwarzane równolegle — starsza wartość po nowszej wyglądała jak restart telefonu i do dnia
+ * dopisywał się cały licznik od uruchomienia (stąd 65 000 kroków). Teraz:
+ * – restart rozpoznajemy po liczniku uruchomień systemu, nie po spadku wartości,
+ * – zdarzenia starsze od ostatnio przetworzonego są pomijane,
+ * – przyrost nie może przekroczyć tego, co da się przejść w danym czasie.
+ */
 object StepsRecorder {
     private val mutex = Mutex()
 
-    suspend fun onCounter(ctx: Context, value: Long, time: Long) = mutex.withLock {
+    /** Najszybszy realny marsz/bieg: ~4 kroki na sekundę. */
+    private const val MAX_STEPS_PER_SEC = 4.0
+
+    private fun bootCount(ctx: Context): Int = try {
+        android.provider.Settings.Global.getInt(ctx.contentResolver, android.provider.Settings.Global.BOOT_COUNT)
+    } catch (e: Exception) {
+        -1
+    }
+
+    /** Chwila uruchomienia telefonu (ms), zaokrąglona do minuty — zapas, gdy brak licznika uruchomień. */
+    private fun bootMinute(): Long = (System.currentTimeMillis() - SystemClock.elapsedRealtime()) / 60_000
+
+    suspend fun onCounter(ctx: Context, value: Long, time: Long, eventNanos: Long) = mutex.withLock {
         val prefs = ctx.getSharedPreferences("engine", Context.MODE_PRIVATE)
+        val boot = bootCount(ctx)
+        val bootMin = bootMinute()
+        val lastBoot = prefs.getInt("stepBoot", Int.MIN_VALUE)
+        val lastBootMin = prefs.getLong("stepBootMin", Long.MIN_VALUE)
         val last = prefs.getLong("stepLast", -1L)
-        prefs.edit().putLong("stepLast", value).apply()
-        if (last < 0) return@withLock
-        val delta = if (value >= last) value - last else value // restart telefonu zeruje licznik
-        if (delta <= 0 || delta > 30_000) return@withLock
+        val lastNanos = prefs.getLong("stepLastNs", -1L)
+
+        val rebooted = if (boot >= 0 && lastBoot != Int.MIN_VALUE) boot != lastBoot
+        else lastBootMin != Long.MIN_VALUE && kotlin.math.abs(bootMin - lastBootMin) > 2
+
+        fun save() = prefs.edit()
+            .putLong("stepLast", value).putLong("stepLastNs", eventNanos)
+            .putInt("stepBoot", boot).putLong("stepBootMin", bootMin)
+            .apply()
+
+        // Pierwszy odczyt (albo pierwsza wersja z tą poprawką) — tylko punkt odniesienia.
+        if (last < 0 || lastNanos < 0 || (lastBoot == Int.MIN_VALUE && lastBootMin == Long.MIN_VALUE)) {
+            save(); return@withLock
+        }
+
+        val delta: Long
+        val seconds: Double
+        if (rebooted) {
+            // Po restarcie licznik liczy od zera — wartość to kroki od uruchomienia.
+            delta = value
+            seconds = SystemClock.elapsedRealtime() / 1000.0
+        } else {
+            if (eventNanos <= lastNanos) return@withLock          // stare zdarzenie z paczki
+            if (value < last) { save(); return@withLock }          // nie powinno się zdarzyć — nowy punkt odniesienia
+            delta = value - last
+            seconds = (eventNanos - lastNanos) / 1e9
+        }
+        save()
+        if (delta <= 0) return@withLock
+        if (delta > seconds * MAX_STEPS_PER_SEC + 50) {
+            Log.w(TrackingService.TAG, "Pominięto nierealny przyrost kroków: $delta w ${seconds.toLong()} s")
+            return@withLock
+        }
         val db = (ctx.applicationContext as LifeApp).db
         val hour = Steps.hourStart(time)
         db.steps().ensure(hour, StepSource.PHONE)
         db.steps().add(hour, StepSource.PHONE, delta)
+    }
+
+    /** Usuwa kroki z czujnika telefonu zapisane przed poprawką (wcześniej mogły być zawyżone). */
+    suspend fun clearPhoneBefore(ctx: Context, before: Long) {
+        val db = (ctx.applicationContext as LifeApp).db
+        db.steps().deleteSourceIn(StepSource.PHONE, 0L, before)
+        try {
+            StepsImporter.run(ctx)
+        } catch (_: Exception) {
+        }
+    }
+
+    /** Godzina pierwszego uruchomienia wersji z poprawką; starsze kroki z telefonu są podejrzane. */
+    fun fixedSince(ctx: Context): Long {
+        val prefs = ctx.getSharedPreferences("engine", Context.MODE_PRIVATE)
+        val v = prefs.getLong("stepFixAt", 0L)
+        if (v > 0) return v
+        val now = Steps.hourStart(System.currentTimeMillis())
+        prefs.edit().putLong("stepFixAt", now).apply()
+        return now
     }
 }
 
@@ -89,7 +163,8 @@ class StepSensor(private val ctx: Context) : SensorEventListener {
         val ageMs = (SystemClock.elapsedRealtimeNanos() - event.timestamp) / 1_000_000
         val time = System.currentTimeMillis() - ageMs.coerceIn(0L, 3_600_000L)
         val app = ctx.applicationContext as LifeApp
-        app.appScope.launch { StepsRecorder.onCounter(ctx, value, time) }
+        val nanos = event.timestamp
+        app.appScope.launch { StepsRecorder.onCounter(ctx, value, time, nanos) }
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit

@@ -45,6 +45,7 @@ class LifeApp : Application() {
             repo.categoryByKind(pl.rafal.lifecycle.data.Kind.SCHOOL)
             repo.categoryByKind(pl.rafal.lifecycle.data.Kind.STOP)
         }
+        pl.rafal.lifecycle.tracking.StepsRecorder.fixedSince(this)
         WatchdogWorker.schedule(this)
     }
 
