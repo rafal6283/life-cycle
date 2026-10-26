@@ -201,8 +201,17 @@ interface EntryDao {
     @Query("SELECT * FROM entries WHERE source IN ('AUTO_STAY','AUTO_MOVE') ORDER BY startAt DESC LIMIT :n")
     suspend fun lastAuto(n: Int): List<Entry>
 
-    @Query("SELECT * FROM entries WHERE placeId IS NULL AND source = 'AUTO_STAY' AND lat IS NOT NULL")
+    @Query(
+        "SELECT * FROM entries WHERE placeId IS NULL AND source = 'AUTO_STAY' AND lat IS NOT NULL " +
+            "AND categoryId IN (SELECT id FROM categories WHERE kind = 'UNKNOWN')"
+    )
     fun observeUnknownStays(): Flow<List<Entry>>
+
+    @Query(
+        "SELECT * FROM entries WHERE placeId IS NULL AND source = 'AUTO_STAY' AND lat IS NOT NULL " +
+            "AND startAt >= :from AND categoryId IN (SELECT id FROM categories WHERE kind = 'UNKNOWN')"
+    )
+    suspend fun unknownStaysSince(from: Long): List<Entry>
 
     @Query("SELECT * FROM entries WHERE placeId IS NULL AND source = 'AUTO_STAY' AND lat IS NOT NULL")
     suspend fun getUnknownStays(): List<Entry>

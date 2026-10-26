@@ -168,7 +168,10 @@ class TrackingEngine(
 
         closeOpen(since)
         db.entries().closeOverrides(since)
-        val catId = place?.categoryId ?: repo.categoryByKind(Kind.UNKNOWN).id
+        // Praca w terenie: nowy pobyt w godzinach pracy = wizyta u klienta (bez pytania o nazwę miejsca).
+        val field = place == null && pl.rafal.lifecycle.domain.FieldWork.activeAt(ctx, since)
+        val catId = place?.categoryId
+            ?: if (field) repo.categoryByKind(Kind.FIELD).id else repo.categoryByKind(Kind.UNKNOWN).id
         db.entries().insert(
             Entry(
                 startAt = since, endAt = null, categoryId = catId, placeId = place?.id,
@@ -177,7 +180,7 @@ class TrackingEngine(
         )
         mode = MODE_STAY
         moving.value = false
-        if (place == null) Notifications.notifyNewPlace(ctx)
+        if (place == null && !field) Notifications.notifyNewPlace(ctx)
     }
 
     private suspend fun startMove(at: Long, lat: Double, lng: Double) {

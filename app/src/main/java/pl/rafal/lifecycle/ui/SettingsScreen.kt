@@ -224,6 +224,11 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
             }
         }
 
+        SectionTitle("Praca w terenie")
+        var fieldReport by remember { mutableStateOf(false) }
+        FieldWorkSettings(onReport = { fieldReport = true })
+        if (fieldReport) FieldReportDialog(LocalDate.now()) { fieldReport = false }
+
         SectionTitle("Dojazdy")
         Group {
             SwitchRow(
@@ -233,6 +238,16 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
             ) {
                 commutes = it
                 prefs.commutes = it
+            }
+            HorizontalDivider(Modifier.padding(start = 16.dp))
+            var school by remember { mutableStateOf(prefs.schoolRuns) }
+            SwitchRow(
+                "Szkoła / przedszkole",
+                "Krótkie postoje (do 30 min) w miejscach z kategorią „Szkoła / przedszkole” jako zawiezienie lub odbiór dzieci",
+                school,
+            ) {
+                school = it
+                prefs.schoolRuns = it
             }
         }
 

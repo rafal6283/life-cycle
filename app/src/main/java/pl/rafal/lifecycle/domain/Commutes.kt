@@ -129,3 +129,73 @@ object Commutes {
         return CommuteStats(avg(toWork), toWork.size, avgD(toWork), avg(toHome), toHome.size, avgD(toHome))
     }
 }
+
+/**
+ * Odwożenie i odbieranie dzieci: krótki postój (do 30 min) w miejscu z kategorią „Szkoła / przedszkole”
+ * razem z przejazdem do niego (i powrotem prosto do domu) dostaje tę kategorię. Przed 12:00 — zawiezienie,
+ * po 12:00 — odbiór. Dłuższy pobyt w szkole (zebranie, praca) zostaje zwykłym pobytem.
+ */
+object SchoolRuns {
+    const val MAX_STOP_MS = 30 * 60_000L
+
+    data class Info(val dropOff: Boolean, val originalCategoryId: Long)
+
+    private val infoCache = java.util.concurrent.ConcurrentHashMap<Long, Info>()
+
+    fun info(entryId: Long): Info? = infoCache[entryId]
+
+    fun enabled(): Boolean = try {
+        Prefs(LifeApp.instance).schoolRuns
+    } catch (e: Exception) {
+        true
+    }
+
+    data class Run(val start: Long, val end: Long, val dropOff: Boolean, val distanceM: Double?, val stopId: Long)
+
+    /** Kursy szkolne w liście wpisów (posortowanej lub nie). */
+    fun detect(entries: List<Entry>, cats: Map<Long, Category>): Pair<List<Run>, Map<Long, Run>> {
+        val school = cats.values.filter { it.kind == Kind.SCHOOL }.map { it.id }.toSet()
+        if (school.isEmpty()) return emptyList<Run>() to emptyMap()
+        val home = cats.values.filter { it.kind == Kind.HOME }.map { it.id }.toSet()
+        val auto = entries.filter { it.source == Source.AUTO_STAY || it.source == Source.AUTO_MOVE }.sortedBy { it.startAt }
+        val runs = mutableListOf<Run>()
+        val byEntry = HashMap<Long, Run>()
+        for ((i, e) in auto.withIndex()) {
+            if (e.source != Source.AUTO_STAY) continue
+            val origCat = Commutes.info(e.id)?.originalCategoryId ?: e.categoryId
+            if (origCat !in school) continue
+            val end = e.endAt ?: continue
+            if (end - e.startAt > MAX_STOP_MS) continue
+            val members = mutableListOf(e)
+            // Dojazd do szkoły: przejazdy tuż przed postojem.
+            var j = i - 1
+            while (j >= 0 && auto[j].source == Source.AUTO_MOVE) { members += auto[j]; j-- }
+            // Powrót: przejazdy po postoju, jeśli kończą się w domu.
+            var k = i + 1
+            val after = mutableListOf<Entry>()
+            while (k < auto.size && auto[k].source == Source.AUTO_MOVE) { after += auto[k]; k++ }
+            val next = auto.getOrNull(k)
+            if (after.isNotEmpty() && next != null && next.categoryId in home) members += after
+            val start = members.minOf { it.startAt }
+            val stop = members.maxOf { it.endAt ?: it.startAt }
+            val dropOff = java.time.Instant.ofEpochMilli(e.startAt).atZone(pl.rafal.lifecycle.util.Fmt.zone).hour < 12
+            val dist = members.filter { it.source == Source.AUTO_MOVE }.mapNotNull { it.distanceM }.takeIf { it.isNotEmpty() }?.sum()
+            val run = Run(start, stop, dropOff, dist, e.id)
+            runs += run
+            members.forEach { byEntry[it.id] = run }
+        }
+        return runs to byEntry
+    }
+
+    fun apply(entries: List<Entry>, categories: List<Category>): List<Entry> {
+        if (!enabled()) return entries
+        val cat = categories.firstOrNull { it.kind == Kind.SCHOOL } ?: return entries
+        val (_, byEntry) = detect(entries, categories.associateBy { it.id })
+        if (byEntry.isEmpty()) return entries
+        return entries.map { e ->
+            val r = byEntry[e.id] ?: return@map e
+            infoCache[e.id] = Info(r.dropOff, Commutes.info(e.id)?.originalCategoryId ?: e.categoryId)
+            e.copy(categoryId = cat.id)
+        }
+    }
+}

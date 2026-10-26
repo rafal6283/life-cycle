@@ -169,7 +169,7 @@ private fun SectionCard(sec: SumSection) {
     Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)) {
             Box(Modifier.size(24.dp).clip(CircleShape).background(Color(sec.color)), contentAlignment = Alignment.Center) {
-                Icon(CatIcons.get(sec.icon), null, tint = Color.White, modifier = Modifier.size(15.dp))
+                CatIcon(sec.icon, Color.White, 15.dp)
             }
             Spacer(Modifier.width(8.dp))
             Text(sec.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)

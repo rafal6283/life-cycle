@@ -3,6 +3,7 @@ package pl.rafal.lifecycle.data
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import pl.rafal.lifecycle.domain.Commutes
+import pl.rafal.lifecycle.domain.SchoolRuns
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import pl.rafal.lifecycle.util.Geo
@@ -17,14 +18,19 @@ class Repository(val db: AppDatabase) {
     /** Wpisy z zakresu z rozpoznanymi dojazdami (zakres poszerzony, by złapać dom/pracę na brzegach). */
     fun entriesIn(from: Long, to: Long): Flow<List<Entry>> =
         combine(db.entries().observeRange(from - MARGIN, to + MARGIN), categories) { e, c ->
-            Commutes.apply(e, c).filter { it.startAt < to && (it.endAt ?: Long.MAX_VALUE) > from }
+            SchoolRuns.apply(Commutes.apply(e, c), c).filter { it.startAt < to && (it.endAt ?: Long.MAX_VALUE) > from }
         }
 
-    suspend fun getRange(from: Long, to: Long): List<Entry> =
-        Commutes.apply(db.entries().getRange(from - MARGIN, to + MARGIN), db.categories().getAll())
+    suspend fun getRange(from: Long, to: Long): List<Entry> {
+        val c = db.categories().getAll()
+        return SchoolRuns.apply(Commutes.apply(db.entries().getRange(from - MARGIN, to + MARGIN), c), c)
             .filter { it.startAt < to && (it.endAt ?: Long.MAX_VALUE) > from }
+    }
 
-    suspend fun allWithCommutes(): List<Entry> = Commutes.apply(db.entries().all(), db.categories().getAll())
+    suspend fun allWithCommutes(): List<Entry> {
+        val c = db.categories().getAll()
+        return SchoolRuns.apply(Commutes.apply(db.entries().all(), c), c)
+    }
 
     private val defaultsLock = Mutex()
 

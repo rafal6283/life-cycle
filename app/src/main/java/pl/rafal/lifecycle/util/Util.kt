@@ -135,6 +135,30 @@ class Prefs(ctx: Context) {
         get() = p.getBoolean("screenTime", true)
         set(v) = p.edit().putBoolean("screenTime", v).apply()
 
+    /** Odwożenie / odbieranie dzieci (szkoła, przedszkole). */
+    var schoolRuns: Boolean
+        get() = p.getBoolean("schoolRuns", true)
+        set(v) = p.edit().putBoolean("schoolRuns", v).apply()
+
+    // --- Praca w terenie
+    var fieldWork: Boolean
+        get() = p.getBoolean("fieldWork", false)
+        set(v) = p.edit().putBoolean("fieldWork", v).apply()
+
+    /** Dni tygodnia 1 (pon) … 7 (nd). */
+    var fieldDays: Set<Int>
+        get() = p.getStringSet("fieldDays", setOf("1", "2", "3", "4", "5"))!!.mapNotNull { it.toIntOrNull() }.toSet()
+        set(v) = p.edit().putStringSet("fieldDays", v.map { it.toString() }.toSet()).apply()
+
+    /** Minuty od północy. */
+    var fieldStart: Int
+        get() = p.getInt("fieldStart", 8 * 60)
+        set(v) = p.edit().putInt("fieldStart", v).apply()
+
+    var fieldEnd: Int
+        get() = p.getInt("fieldEnd", 18 * 60)
+        set(v) = p.edit().putInt("fieldEnd", v).apply()
+
     var commutes: Boolean
         get() = p.getBoolean("commutes", true)
         set(v) = p.edit().putBoolean("commutes", v).apply()

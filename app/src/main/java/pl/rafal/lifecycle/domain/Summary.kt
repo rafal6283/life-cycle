@@ -200,6 +200,54 @@ object Summaries {
         }
         if (extRows.isNotEmpty()) sections += SumSection("Z innych aplikacji", "air", 0xFF8E44AD, extRows)
 
+        // --- Praca w terenie
+        if (Prefs(ctx).fieldWork || cats.values.any { it.kind == Kind.FIELD && stats.totals.containsKey(it.id) }) {
+            val fieldCat = cats.values.firstOrNull { it.kind == Kind.FIELD }
+            if (fieldCat != null && (stats.totals[fieldCat.id] ?: 0L) > 0) {
+                val rows = mutableListOf<SumRow>()
+                var visits = 0
+                var kmSum = 0.0
+                var workDays = 0
+                var span = 0L
+                var d = p.start
+                val today = LocalDate.now()
+                while (d < p.end && d <= today) {
+                    val r = FieldWork.report(ctx, d)
+                    if (r.visits.isNotEmpty()) {
+                        workDays++
+                        visits += r.visits.size
+                        kmSum += r.km
+                        span += r.spanMs
+                    }
+                    d = d.plusDays(1)
+                }
+                rows += SumRow("Wizyty u klientów", "$visits w $workDays dni", null, null, "handyman", fieldCat.color)
+                rows += SumRow("Czas u klientów", Fmt.durationShort(stats.totals[fieldCat.id] ?: 0L))
+                if (workDays > 0) rows += SumRow("Dzień pracy średnio", Fmt.durationShort(span / workDays))
+                rows += SumRow("Kilometry służbowe", String.format(Fmt.PL, "%.1f km", kmSum), null, null, "car")
+                sections += SumSection("Praca w terenie", "handyman", 0xFF0A84FF, rows)
+            }
+        }
+
+        // --- Szkoła / przedszkole
+        run {
+            val (runs, _) = SchoolRuns.detect(entries, cats)
+            val cur = runs.filter { it.start >= curFrom }
+            if (cur.isNotEmpty()) {
+                val schoolCat = cats.values.firstOrNull { it.kind == Kind.SCHOOL }
+                val rows = mutableListOf(
+                    SumRow("Zawiezienia", "${cur.count { it.dropOff }}", null, null, schoolCat?.icon, schoolCat?.color),
+                    SumRow("Odbiory", "${cur.count { !it.dropOff }}"),
+                    SumRow("Czas razem", Fmt.durationShort(cur.sumOf { it.end - it.start })),
+                    SumRow("Średnio kurs", Fmt.durationShort(cur.sumOf { it.end - it.start } / cur.size)),
+                )
+                cur.mapNotNull { it.distanceM }.takeIf { it.isNotEmpty() }?.let {
+                    rows += SumRow("Kilometry", String.format(Fmt.PL, "%.1f km", it.sum() / 1000))
+                }
+                sections += SumSection("Szkoła / przedszkole", schoolCat?.icon ?: "school", 0xFFFFB300, rows)
+            }
+        }
+
         // --- Telefon (czas przed ekranem)
         val screens = db.screen().range(prev.start.toEpochDay(), p.end.toEpochDay())
         val sCur = screens.filter { it.day >= p.start.toEpochDay() }

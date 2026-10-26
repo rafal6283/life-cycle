@@ -15,6 +15,10 @@ object Kind {
     const val BIKE = "BIKE"
     const val WORKOUT = "WORKOUT"
     const val COMMUTE = "COMMUTE"
+    /** Praca w terenie: wizyta u klienta. */
+    const val FIELD = "FIELD"
+    /** Szkoła / przedszkole — miejsce; krótkie postoje tam to odwożenie i odbieranie dzieci. */
+    const val SCHOOL = "SCHOOL"
     const val UNKNOWN = "UNKNOWN"
     const val CUSTOM = "CUSTOM"
 
@@ -116,6 +120,8 @@ object DefaultCategories {
         c("Rozrywka", 0xFF8E44AD, "fun", Kind.CUSTOM, 11),
         c("Nauka", 0xFF007AFF, "study", Kind.CUSTOM, 12),
         c("Dojazd", 0xFF7A8794, "commute", Kind.COMMUTE, 13),
+        c("Serwis u klienta", 0xFF0A84FF, "handyman", Kind.FIELD, 14),
+        Category(name = "Szkoła / przedszkole", color = 0xFFFFB300.toInt(), icon = "emoji:🎒", kind = Kind.SCHOOL, sortOrder = 15),
         c("Nieznane", 0xFFA0A0A8, "unknown", Kind.UNKNOWN, 99),
     )
 }

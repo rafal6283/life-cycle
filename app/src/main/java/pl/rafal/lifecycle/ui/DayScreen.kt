@@ -120,6 +120,7 @@ fun DayScreen(healthNav: () -> Unit = {}) {
     var drag by remember { mutableStateOf(0f) }
     var showMap by remember { mutableStateOf(false) }
     var showScreen by remember { mutableStateOf(false) }
+    var showField by remember { mutableStateOf(false) }
     var quick by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val override by repo.override.collectAsState(initial = null)
@@ -279,6 +280,14 @@ fun DayScreen(healthNav: () -> Unit = {}) {
                 Spacer(Modifier.height(10.dp))
                 ScreenTimeCard(day) { showScreen = true }
             }
+            item {
+                Spacer(Modifier.height(10.dp))
+                FieldDayCard(day, entries) { showField = true }
+            }
+            item {
+                Spacer(Modifier.height(10.dp))
+                SchoolDayCard(day, entries)
+            }
 
             if (goalProgress.isNotEmpty()) {
                 item { SectionTitle(if (isToday) "Cele" else "Cele (stan na ten dzień)") }
@@ -339,6 +348,7 @@ fun DayScreen(healthNav: () -> Unit = {}) {
     editing?.let { EntryEditorDialog(entry = it, defaultDay = day, onDismiss = { editing = null }) }
     if (showMap) DayMapDialog(day) { showMap = false }
     if (showScreen) ScreenTimeDialog(day) { showScreen = false }
+    if (showField) FieldReportDialog(day) { showField = false }
     if (editStepGoal) StepGoalDialog { editStepGoal = false; stepGoalTick++ }
     if (quick) QuickSwitchDialog { quick = false }
     if (adding) EntryEditorDialog(entry = null, defaultDay = day, onDismiss = { adding = false })
@@ -405,8 +415,12 @@ private fun SegmentRow(seg: Segment, cat: Category?, place: Place?, ongoing: Boo
             )
             val sub = listOfNotNull(
                 if (place != null) cat?.name else null,
-                pl.rafal.lifecycle.domain.Commutes.info(seg.entry.id)?.let { inf ->
-                    (if (inf.toWork) "do pracy" else "do domu")
+                when (cat?.kind) {
+                    pl.rafal.lifecycle.data.Kind.SCHOOL -> pl.rafal.lifecycle.domain.SchoolRuns.info(seg.entry.id)
+                        ?.let { if (it.dropOff) "zawiezienie" else "odbiór" }
+                    pl.rafal.lifecycle.data.Kind.COMMUTE -> pl.rafal.lifecycle.domain.Commutes.info(seg.entry.id)
+                        ?.let { inf -> if (inf.toWork) "do pracy" else "do domu" }
+                    else -> null
                 },
                 seg.entry.distanceM?.let { Fmt.distance(it) },
                 Source.label(seg.entry.source),
