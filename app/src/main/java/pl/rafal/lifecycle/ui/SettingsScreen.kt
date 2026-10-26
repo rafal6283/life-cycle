@@ -453,6 +453,15 @@ fun CategoriesScreen(onBack: () -> Unit) {
             },
             modifier = Modifier.padding(horizontal = 12.dp),
         ) { Text("Zastosuj kolory i ikony w stylu Life Cycle") }
+        TextButton(
+            onClick = {
+                scope.launch {
+                    restoreDefaultPalette(categories)
+                    Toast.makeText(ctx, "Przywrócono domyślne kolory i ikony", Toast.LENGTH_SHORT).show()
+                }
+            },
+            modifier = Modifier.padding(horizontal = 12.dp),
+        ) { Text("Przywróć domyślne kolory i ikony Doby") }
         LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
             items(categories, key = { it.id }) { c ->
                 Row(
@@ -616,5 +625,17 @@ private suspend fun applyLifeCyclePalette(categories: List<Category>) {
     for (c in categories) {
         val (color, icon) = byKind[c.kind] ?: byName[c.name] ?: continue
         repo.saveCategory(c.copy(color = color.toInt(), icon = icon))
+    }
+}
+
+/** Cofa paletę Life Cycle: kategorie domyślne wracają do kolorów i ikon z pierwszej instalacji. */
+private suspend fun restoreDefaultPalette(categories: List<Category>) {
+    val repo = LifeApp.instance.repo
+    val defaults = pl.rafal.lifecycle.data.DefaultCategories.list
+    for (c in categories) {
+        val d = (if (c.kind != Kind.CUSTOM) defaults.firstOrNull { it.kind == c.kind } else null)
+            ?: defaults.firstOrNull { it.name == c.name }
+            ?: continue
+        repo.saveCategory(c.copy(color = d.color, icon = d.icon))
     }
 }
