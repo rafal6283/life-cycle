@@ -35,6 +35,8 @@ object FieldWork {
     data class Trip(
         val start: Long, val end: Long, val distanceM: Double?,
         val from: String, val to: String, val toVisit: Visit?,
+        /** Krótkie postoje po drodze (sklep, stacja). */
+        val stops: Int = 0,
     )
 
     data class DayReport(
@@ -85,6 +87,7 @@ object FieldWork {
             .filter { it.source == Source.AUTO_STAY || it.source == Source.AUTO_MOVE }
             .sortedBy { it.startAt }
         fun isField(e: Entry) = e.source == Source.AUTO_STAY && cats[e.categoryId]?.kind == Kind.FIELD
+        fun isStop(e: Entry) = e.source == Source.AUTO_STAY && cats[e.categoryId]?.kind == Kind.STOP
         fun label(e: Entry?): String {
             if (e == null) return "—"
             e.placeId?.let { places[it]?.name }?.let { return it }
@@ -99,8 +102,8 @@ object FieldWork {
         val firstIdx = auto.indexOfFirst { isField(it) }
         val lastIdx = auto.indexOfLast { isField(it) }
         // Wyjazd: koniec ostatniego pobytu przed pierwszą wizytą; powrót: początek pierwszego pobytu po ostatniej.
-        val before = auto.subList(0, firstIdx).lastOrNull { it.source == Source.AUTO_STAY }
-        val after = auto.subList(lastIdx + 1, auto.size).firstOrNull { it.source == Source.AUTO_STAY }
+        val before = auto.subList(0, firstIdx).lastOrNull { it.source == Source.AUTO_STAY && !isStop(it) }
+        val after = auto.subList(lastIdx + 1, auto.size).firstOrNull { it.source == Source.AUTO_STAY && !isStop(it) }
         val workStart = maxOf(before?.endAt ?: visits.first().start, from)
         val workEnd = minOf(after?.startAt ?: visits.last().end, to)
 
@@ -112,7 +115,7 @@ object FieldWork {
                 if (e.source == Source.AUTO_STAY && e.startAt < workStart) prevStay = e
                 continue
             }
-            if (e.source == Source.AUTO_MOVE) {
+            if (e.source == Source.AUTO_MOVE || isStop(e)) {
                 acc.add(e)
             } else {
                 if (acc.isNotEmpty()) {
@@ -120,6 +123,7 @@ object FieldWork {
                     trips += Trip(
                         acc.first().startAt, acc.last().endAt ?: now, dist,
                         label(prevStay), label(e), visits.firstOrNull { it.entry.id == e.id },
+                        acc.count { isStop(it) },
                     )
                     acc = mutableListOf()
                 }
@@ -194,5 +198,81 @@ object FieldWork {
         rows.append(";;;;RAZEM;").append(String.format(Fmt.PL, "%.1f", totalKm)).append(";\n")
         ctx.contentResolver.openOutputStream(uri, "wt")?.use { it.write(rows.toString().toByteArray(Charsets.UTF_8)) }
         n
+    }
+
+    // ------------------------------------------------------------------ postoje, „to nie klient”, częste miejsca
+
+    /** Wizyty krótsze niż ustawione minimum (bez zapisanego miejsca) pokazują się jako „Postój w trasie”. */
+    fun applyStops(entries: List<Entry>, categories: List<pl.rafal.lifecycle.data.Category>): List<Entry> {
+        val field = categories.firstOrNull { it.kind == Kind.FIELD } ?: return entries
+        val stop = categories.firstOrNull { it.kind == Kind.STOP } ?: return entries
+        val minMs = try {
+            Prefs(LifeApp.instance).fieldMinMinutes * 60_000L
+        } catch (e: Exception) {
+            15 * 60_000L
+        }
+        if (minMs <= 0) return entries
+        return entries.map { e ->
+            val end = e.endAt
+            if (e.source == Source.AUTO_STAY && e.placeId == null && e.categoryId == field.id &&
+                end != null && end - e.startAt < minMs
+            ) e.copy(categoryId = stop.id) else e
+        }
+    }
+
+    /**
+     * „To nie klient”: zmienia kategorię wpisów; jeśli podano nazwę — zapisuje miejsce, a wcześniejsze
+     * wizyty i postoje w jego promieniu dostają nowe miejsce i kategorię (kolejne rozpoznają się same).
+     */
+    suspend fun reassign(ctx: Context, entries: List<Entry>, categoryId: Long, placeName: String?) {
+        val app = ctx.applicationContext as LifeApp
+        val db = app.db
+        val ref = entries.firstOrNull { it.lat != null && it.lng != null }
+        val rLat = ref?.lat
+        val rLng = ref?.lng
+        var placeId: Long? = null
+        if (!placeName.isNullOrBlank() && rLat != null && rLng != null) {
+            placeId = app.repo.savePlace(
+                pl.rafal.lifecycle.data.Place(name = placeName.trim(), lat = rLat, lng = rLng, radius = 80.0, categoryId = categoryId)
+            )
+            val field = app.repo.categoryByKind(Kind.FIELD).id
+            for (e in db.entries().fieldStaysSince(field, 0L)) {
+                val lat = e.lat ?: continue
+                val lng = e.lng ?: continue
+                if (pl.rafal.lifecycle.util.Geo.distance(lat, lng, rLat, rLng) <= 110) {
+                    db.entries().update(e.copy(categoryId = categoryId, placeId = placeId))
+                }
+            }
+        }
+        for (e in entries) {
+            val raw = db.entries().byId(e.id) ?: continue
+            db.entries().update(raw.copy(categoryId = categoryId, placeId = placeId ?: raw.placeId))
+        }
+    }
+
+    data class Frequent(val key: String, val lat: Double, val lng: Double, val visits: Int, val days: Int, val entries: List<Entry>)
+
+    /** Miejsca bez nazwy, w których w godzinach pracy bywasz w kilku różnych dniach — raczej sklep niż klient. */
+    suspend fun frequent(ctx: Context, days: Int = 30): List<Frequent> = withContext(Dispatchers.Default) {
+        val app = ctx.applicationContext as LifeApp
+        val field = app.db.categories().byKind(Kind.FIELD)?.id ?: return@withContext emptyList()
+        val since = Fmt.dayStart(LocalDate.now().minusDays(days.toLong()))
+        val stays = app.db.entries().fieldStaysSince(field, since).filter { it.lat != null && it.lng != null }
+        val dismissed = ctx.getSharedPreferences("field_dismissed", Context.MODE_PRIVATE).all.keys
+        data class Acc(var lat: Double, var lng: Double, val list: MutableList<Entry>)
+        val clusters = mutableListOf<Acc>()
+        for (e in stays) {
+            val c = clusters.firstOrNull { pl.rafal.lifecycle.util.Geo.distance(it.lat, it.lng, e.lat!!, e.lng!!) < 100 }
+            if (c == null) clusters += Acc(e.lat!!, e.lng!!, mutableListOf(e)) else c.list += e
+        }
+        clusters.mapNotNull { c ->
+            val d = c.list.map { Fmt.toLocalDate(it.startAt) }.distinct().size
+            val key = String.format(Locale.US, "%.3f,%.3f", c.lat, c.lng)
+            if (d >= 3 && key !in dismissed) Frequent(key, c.lat, c.lng, c.list.size, d, c.list) else null
+        }.sortedByDescending { it.days }
+    }
+
+    fun dismiss(ctx: Context, key: String) {
+        ctx.getSharedPreferences("field_dismissed", Context.MODE_PRIVATE).edit().putBoolean(key, true).apply()
     }
 }

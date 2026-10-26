@@ -234,6 +234,12 @@ interface EntryDao {
     @Query("SELECT * FROM entries ORDER BY startAt")
     suspend fun all(): List<Entry>
 
+    @Query("SELECT * FROM entries WHERE id = :id")
+    suspend fun byId(id: Long): Entry?
+
+    @Query("SELECT * FROM entries WHERE source = 'AUTO_STAY' AND placeId IS NULL AND categoryId = :fieldCat AND startAt >= :since ORDER BY startAt")
+    suspend fun fieldStaysSince(fieldCat: Long, since: Long): List<Entry>
+
     @Query("SELECT * FROM entries WHERE endAt IS NULL AND source = 'OVERRIDE' ORDER BY startAt DESC LIMIT 1")
     fun observeOverride(): Flow<Entry?>
 

@@ -45,6 +45,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -163,7 +164,26 @@ private fun FieldDayView(day: LocalDate, onDay: (LocalDate) -> Unit) {
         value = null
         value = FieldWork.report(ctx, day)
     }
+    var notClient by remember { mutableStateOf<Pair<List<pl.rafal.lifecycle.data.Entry>, String>?>(null) }
+    val fieldScope = rememberCoroutineScope()
+    val frequent by produceState<List<FieldWork.Frequent>>(emptyList(), refresh) { value = FieldWork.frequent(ctx) }
     DayNav(day, onDay)
+    frequent.take(3).forEach { f ->
+        FrequentCard(f, onSave = { addr -> notClient = f.entries to addr }, onClient = {
+            FieldWork.dismiss(ctx, f.key)
+            refresh++
+        })
+        Spacer(Modifier.height(8.dp))
+    }
+    notClient?.let { (entries, addr) ->
+        NotClientDialog(entries.size, addr, onDismiss = { notClient = null }) { catId, name ->
+            notClient = null
+            fieldScope.launch {
+                FieldWork.reassign(ctx, entries, catId, name)
+                refresh++
+            }
+        }
+    }
     val r = rep
     if (r == null) {
         Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -210,7 +230,8 @@ private fun FieldDayView(day: LocalDate, onDay: (LocalDate) -> Unit) {
                     Icon(Icons.Filled.DirectionsCar, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        "${Fmt.time(item.start)}–${Fmt.time(item.end)} · ${Fmt.durationShort(item.end - item.start)}",
+                        "${Fmt.time(item.start)}–${Fmt.time(item.end)} · ${Fmt.durationShort(item.end - item.start)}" +
+                            (if (item.stops > 0) " · postoje: ${item.stops}" else ""),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
@@ -248,7 +269,16 @@ private fun FieldDayView(day: LocalDate, onDay: (LocalDate) -> Unit) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Text(Fmt.durationShort(item.end - item.start), fontWeight = FontWeight.SemiBold)
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(Fmt.durationShort(item.end - item.start), fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "To nie klient",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.clickable { notClient = listOf(item.entry) to (addr ?: "") }
+                                    .padding(vertical = 4.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -393,6 +423,18 @@ fun FieldWorkSettings(onReport: () -> Unit) {
                     }, { Text(l) })
                 }
             }
+            var minMin by remember { mutableIntStateOf(prefs.fieldMinMinutes) }
+            Text("Wizyta trwa co najmniej", style = MaterialTheme.typography.labelLarge)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(5, 10, 15, 20, 30, 45).forEach { m ->
+                    FilterChip(minMin == m, { minMin = m; prefs.fieldMinMinutes = m }, { Text("$m min") })
+                }
+            }
+            Text(
+                "Krótsze postoje (sklep, stacja) to „Postój w trasie” — nie liczą się jako wizyty.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Godziny", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
                 TextButton(onClick = { pick = "start" }) { Text(hhmm(start), fontWeight = FontWeight.SemiBold) }
@@ -468,4 +510,82 @@ fun SchoolDayCard(day: LocalDate, refreshKey: Any) {
             }
         }
     }
+}
+
+
+// ---------------------------------------------------------------------------
+// „To nie klient” i częste postoje
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun FrequentCard(f: FieldWork.Frequent, onSave: (String) -> Unit, onClient: () -> Unit) {
+    val ctx = LocalContext.current
+    val addr by produceState<String?>(null, f.key) { value = FieldWork.address(ctx, f.lat, f.lng) }
+    Column(
+        Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp))
+            .background(Color(0xFFFFCC00).copy(alpha = 0.15f)).padding(14.dp)
+    ) {
+        Text(
+            "Częsty postój: ${addr ?: "to samo miejsce"}",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            "Byłeś tu ${f.visits} razy w ${f.days} różne dni (ostatnie 30 dni). To raczej sklep, hurtownia albo stacja niż klient?",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Row {
+            TextButton(onClick = { onSave(addr ?: "") }) { Text("Zapisz jako miejsce") }
+            TextButton(onClick = onClient) { Text("To klient") }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun NotClientDialog(count: Int, address: String, onDismiss: () -> Unit, onSave: (Long, String?) -> Unit) {
+    val categories by LifeApp.instance.repo.categories.collectAsState(initial = emptyList())
+    val shop = categories.firstOrNull { it.name == "Zakupy" }?.id
+    var cat by remember(shop) { mutableStateOf(shop) }
+    var keep by remember { mutableStateOf(true) }
+    var name by remember { mutableStateOf(address) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (count > 1) "To nie klient ($count wizyt)" else "To nie klient") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text("Co to było?", style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.height(6.dp))
+                CategoryPicker(
+                    categories.filter { it.kind !in setOf(Kind.FIELD, Kind.UNKNOWN, Kind.COMMUTE, Kind.STOP) },
+                    cat,
+                ) { cat = it }
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.Checkbox(keep, { keep = it })
+                    Text("Zapamiętaj to miejsce na stałe")
+                }
+                if (keep) {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = name, onValueChange = { name = it },
+                        label = { Text("Nazwa, np. Castorama Otwock") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        "Wcześniejsze i kolejne postoje tutaj dostaną tę kategorię zamiast „Serwis u klienta”.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = cat != null && (!keep || name.isNotBlank()),
+                onClick = { cat?.let { onSave(it, if (keep) name else null) } },
+            ) { Text("Zapisz") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Anuluj") } },
+    )
 }

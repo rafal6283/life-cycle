@@ -159,6 +159,11 @@ class Prefs(ctx: Context) {
         get() = p.getInt("fieldEnd", 18 * 60)
         set(v) = p.edit().putInt("fieldEnd", v).apply()
 
+    /** Minimalny czas wizyty u klienta (minuty); krótsze postoje to „Postój w trasie”. */
+    var fieldMinMinutes: Int
+        get() = p.getInt("fieldMinMinutes", 15)
+        set(v) = p.edit().putInt("fieldMinMinutes", v).apply()
+
     var commutes: Boolean
         get() = p.getBoolean("commutes", true)
         set(v) = p.edit().putBoolean("commutes", v).apply()

@@ -41,6 +41,9 @@ class LifeApp : Application() {
         appScope.launch {
             repo.ensureDefaults()
             repo.categoryByKind(pl.rafal.lifecycle.data.Kind.COMMUTE)
+            repo.categoryByKind(pl.rafal.lifecycle.data.Kind.FIELD)
+            repo.categoryByKind(pl.rafal.lifecycle.data.Kind.SCHOOL)
+            repo.categoryByKind(pl.rafal.lifecycle.data.Kind.STOP)
         }
         WatchdogWorker.schedule(this)
     }
