@@ -96,6 +96,14 @@ fun PeriodDonutScreen(index: Int, onPeriod: (Int) -> Unit) {
         if (cur.isEmpty()) null else cur.values.sum() / cur.size
     }
     var selected by remember(type, startDay) { mutableStateOf<Any?>(null) }
+    val screenOn = remember { pl.rafal.lifecycle.util.Prefs(LifeApp.instance).screenTime }
+    val screens by remember(type, startDay) {
+        LifeApp.instance.db.screen().observe(period.start.toEpochDay(), period.end.toEpochDay())
+    }.collectAsState(initial = emptyList())
+    val phoneByCat by produceState<Map<Long, Long>>(emptyMap(), entries, screens) {
+        val e = entries ?: return@produceState
+        value = if (screenOn) pl.rafal.lifecycle.domain.PhoneByActivity.compute(e, screens, System.currentTimeMillis()) else emptyMap()
+    }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { Spacer(Modifier.height(8.dp)) }
@@ -132,6 +140,10 @@ fun PeriodDonutScreen(index: Int, onPeriod: (Int) -> Unit) {
                     onSelect = { selected = it },
                     animKey = "$type-$startDay-${slices.size}",
                     modifier = Modifier.size(330.dp),
+                    phone = if (phoneByCat.isEmpty()) null else sorted.map { (id, v) ->
+                        val f = ((phoneByCat[id] ?: 0L).toFloat() / v.coerceAtLeast(1L)).coerceIn(0f, 1f)
+                        if (f > 0f) listOf(0f to f) else emptyList()
+                    },
                 ) {
                     val sel = selected as? Long
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -144,6 +156,15 @@ fun PeriodDonutScreen(index: Int, onPeriod: (Int) -> Unit) {
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            val ph = phoneByCat[sel] ?: 0L
+                            if (ph >= 60_000L && screens.isNotEmpty()) {
+                                Text(
+                                    "📱 ${Fmt.durationShort(ph / screens.size)} / dzień",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = androidx.compose.ui.graphics.Color(0xFF7D7AFF),
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
                         } else if (avgSteps != null) {
                             Text(Fmt.steps(avgSteps), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                             Text("kroków dziennie", style = MaterialTheme.typography.labelMedium)

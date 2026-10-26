@@ -104,6 +104,16 @@ fun DayScreen(healthNav: () -> Unit = {}) {
 
     var clockMode by rememberSaveable { mutableStateOf(false) }
     var selSlice by remember(epochDay) { mutableStateOf<Any?>(null) }
+    // Czas przed ekranem nałożony na pierścień
+    var showPhone by rememberSaveable { mutableStateOf(true) }
+    val screenDays by remember(epochDay) { LifeApp.instance.db.screen().observe(epochDay, epochDay + 1) }
+        .collectAsState(initial = emptyList())
+    val phoneAbs = remember(screenDays, from) {
+        val sd = screenDays.firstOrNull()
+        if (sd == null || !pl.rafal.lifecycle.util.Prefs(LifeApp.instance).screenTime) emptyList()
+        else sd.sessionList().map { (a, b) -> from + a to from + b }
+    }
+    val phoneTotal = remember(phoneAbs) { phoneAbs.sumOf { it.second - it.first } }
     val daySlices = remember(segments, catMap) { mergeSlices(segments, catMap) }
     var editing by remember { mutableStateOf<Entry?>(null) }
     var adding by remember { mutableStateOf(false) }
@@ -189,8 +199,9 @@ fun DayScreen(healthNav: () -> Unit = {}) {
                                 modifier = Modifier.fillMaxSize(),
                                 stroke = 40.dp,
                                 animKey = epochDay,
+                                phone = if (showPhone) phoneAbs.map { (a, b) -> a - from to b - from } else emptyList(),
                             )
-                            DonutCenter(stepsTotal, tracked, null)
+                            DonutCenter(stepsTotal, tracked, null, if (showPhone) phoneTotal else 0L)
                         }
                     } else {
                         AnimatedDonut(
@@ -199,16 +210,26 @@ fun DayScreen(healthNav: () -> Unit = {}) {
                             onSelect = { selSlice = it },
                             animKey = "$epochDay-${daySlices.size > 0}",
                             modifier = Modifier.size(330.dp),
+                            phone = if (showPhone && phoneAbs.isNotEmpty()) daySlices.map { d ->
+                                val len = (d.end - d.start).toFloat().coerceAtLeast(1f)
+                                phoneAbs.mapNotNull { (a, b) ->
+                                    val x = maxOf(a, d.start)
+                                    val y = minOf(b, d.end)
+                                    if (y > x) (x - d.start) / len to (y - d.start) / len else null
+                                }
+                            } else null,
                         ) {
                             DonutCenter(stepsTotal, tracked, daySlices.firstOrNull { it.slice.key == selSlice }?.let { d ->
                                 val c = catMap[d.catId]
                                 val names = d.places.mapNotNull { placeMap[it]?.name }.distinct()
-                                listOf(
+                                val ph = phoneAbs.sumOf { (a, b) -> (minOf(b, d.end) - maxOf(a, d.start)).coerceAtLeast(0L) }
+                                listOfNotNull(
                                     names.firstOrNull() ?: c?.name ?: "—",
                                     Fmt.durationShort(d.end - d.start),
                                     "${Fmt.time(d.start)}–${Fmt.time(d.end)} · ${if (tracked > 0) (d.end - d.start) * 100 / tracked else 0}%",
+                                    if (showPhone && ph >= 60_000L) "📱 ${Fmt.durationShort(ph)} na telefonie" else null,
                                 )
-                            })
+                            }, if (showPhone) phoneTotal else 0L)
                         }
                     }
                 }
@@ -221,6 +242,16 @@ fun DayScreen(healthNav: () -> Unit = {}) {
                     androidx.compose.material3.FilterChip(!clockMode, { clockMode = false; selSlice = null }, { Text("Pierścień") })
                     Spacer(Modifier.width(8.dp))
                     androidx.compose.material3.FilterChip(clockMode, { clockMode = true }, { Text("Zegar 24 h") })
+                    if (phoneAbs.isNotEmpty()) {
+                        Spacer(Modifier.width(8.dp))
+                        androidx.compose.material3.FilterChip(
+                            showPhone, { showPhone = !showPhone },
+                            { Text("📱 Telefon") },
+                            colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF7D7AFF).copy(alpha = 0.25f),
+                            ),
+                        )
+                    }
                 }
             }
 
@@ -456,13 +487,24 @@ private fun mergeSlices(segments: List<Segment>, catMap: Map<Long, Category>): L
 }
 
 @Composable
-private fun DonutCenter(steps: Long, tracked: Long, selected: List<String>?) {
+private fun DonutCenter(steps: Long, tracked: Long, selected: List<String>?, phoneMs: Long = 0L) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         if (selected != null) {
             Text(selected[0], style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1)
             Text(selected[1], style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text(selected[2], style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            selected.getOrNull(3)?.let {
+                Text(it, style = MaterialTheme.typography.labelMedium, color = Color(0xFF7D7AFF), fontWeight = FontWeight.SemiBold)
+            }
         } else {
+            if (phoneMs >= 60_000L) {
+                Text(
+                    "📱 ${Fmt.durationShort(phoneMs)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFF7D7AFF),
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
             Text(Fmt.steps(steps), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text("kroków", style = MaterialTheme.typography.bodyMedium)
             if (tracked > 0) {

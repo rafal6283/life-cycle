@@ -67,6 +67,8 @@ fun AnimatedDonut(
     onSelect: (Any?) -> Unit,
     animKey: Any,
     modifier: Modifier = Modifier,
+    /** Czas przed ekranem: dla każdego wycinka odcinki (od, do) jako ułamki jego długości. */
+    phone: List<List<Pair<Float, Float>>>? = null,
     centerContent: @Composable () -> Unit,
 ) {
     val progress = remember(animKey) { Animatable(0f) }
@@ -168,6 +170,26 @@ fun AnimatedDonut(
                     Offset(center.x - r + ox, center.y - r + oy), Size(r * 2, r * 2),
                     style = Stroke(t),
                 )
+            }
+
+            // Telefon: fioletowe odcinki na wewnętrznym pierścieniu, w obrębie każdej aktywności.
+            if (phone != null) {
+                val pc = Color(0xFF7D7AFF)
+                geo.forEachIndexed { i, g ->
+                    val ranges = phone.getOrNull(i) ?: return@forEachIndexed
+                    val dim = selected != null && g.slice.key != selected
+                    val usable = g.sweep - gapDeg
+                    ranges.forEach { (f0, f1) ->
+                        val a0 = g.start + gapDeg / 2 + usable * f0
+                        if (a0 >= limit) return@forEach
+                        val sw = (usable * (f1 - f0)).coerceAtLeast(1.2f)
+                        drawArc(
+                            pc.copy(alpha = if (dim) 0.35f else 1f), a0, minOf(sw, limit - a0), false,
+                            Offset(center.x - innerR, center.y - innerR), Size(innerR * 2, innerR * 2),
+                            style = Stroke(dashStroke),
+                        )
+                    }
+                }
             }
 
             // Ikony i czasy — pojawiają się pod koniec animacji.

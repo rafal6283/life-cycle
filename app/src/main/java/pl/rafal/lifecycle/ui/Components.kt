@@ -419,7 +419,11 @@ data class RingArc(val color: Color, val start: Long, val end: Long)
 
 /** Pierścień 24-godzinny: segmenty ułożone według pory dnia (jak tarcza zegara). */
 @Composable
-fun ClockRing(arcs: List<RingArc>, dayLength: Long, now: Long?, modifier: Modifier, stroke: Dp = 30.dp, animKey: Any = dayLength) {
+fun ClockRing(
+    arcs: List<RingArc>, dayLength: Long, now: Long?, modifier: Modifier, stroke: Dp = 30.dp, animKey: Any = dayLength,
+    /** Odcinki używania telefonu (ms od północy) — fioletowy pierścień wewnątrz tarczy. */
+    phone: List<Pair<Long, Long>> = emptyList(),
+) {
     val track = MaterialTheme.colorScheme.surfaceVariant
     val tickColor = MaterialTheme.colorScheme.onSurfaceVariant
     val nowColor = MaterialTheme.colorScheme.onSurface
@@ -464,6 +468,18 @@ fun ClockRing(arcs: List<RingArc>, dayLength: Long, now: Long?, modifier: Modifi
                 Offset(center.x + r2 * cos(ang).toFloat(), center.y + r2 * sin(ang).toFloat()),
                 strokeWidth = 1.dp.toPx(),
             )
+        }
+        if (phone.isNotEmpty()) {
+            val pr = r - sw / 2 - 17.dp.toPx()
+            val psw = 7.dp.toPx()
+            val ptl = Offset(center.x - pr, center.y - pr)
+            drawArc(track.copy(alpha = 0.6f), 0f, 360f, false, ptl, Size(pr * 2, pr * 2), style = Stroke(psw))
+            phone.forEach { (a, b) ->
+                val start = -90f + 360f * a / dayLength
+                if (start >= limit) return@forEach
+                val sweep = (360f * (b - a) / dayLength).coerceAtLeast(0.8f)
+                drawArc(Color(0xFF7D7AFF), start, minOf(sweep, limit - start), false, ptl, Size(pr * 2, pr * 2), style = Stroke(psw))
+            }
         }
         if (now != null && grow >= 1f) {
             val ang = Math.toRadians(-90.0 + 360.0 * now / dayLength)

@@ -198,3 +198,27 @@ object HealthDay {
         }
     }
 }
+
+/** Czas na telefonie w podziale na aktywności z osi czasu (np. Praca 1 h, Dom 2 h, Sen 10 min). */
+object PhoneByActivity {
+    suspend fun compute(
+        entries: List<pl.rafal.lifecycle.data.Entry>,
+        screens: List<pl.rafal.lifecycle.data.ScreenDay>,
+        now: Long,
+    ): Map<Long, Long> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+        val out = HashMap<Long, Long>()
+        for (sd in screens) {
+            val day = java.time.LocalDate.ofEpochDay(sd.day)
+            val from = Fmt.dayStart(day)
+            val to = Fmt.dayStart(day.plusDays(1))
+            val sessions = sd.sessionList().map { (a, b) -> from + a to from + b }
+            if (sessions.isEmpty()) continue
+            val segs = Timeline.resolve(entries.filter { it.startAt < to && (it.endAt ?: now) > from }, from, to, now)
+            for (s in segs) for ((a, b) in sessions) {
+                val ov = minOf(b, s.end) - maxOf(a, s.start)
+                if (ov > 0) out[s.entry.categoryId] = (out[s.entry.categoryId] ?: 0L) + ov
+            }
+        }
+        out
+    }
+}

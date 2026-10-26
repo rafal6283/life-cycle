@@ -196,7 +196,20 @@ data class ScreenDay(
     /** 24 wartości ms oddzielone przecinkami. */
     val hours: String,
     val updatedAt: Long,
+    /** Dokładne odcinki używania: „początek-koniec;…” w sekundach od północy. */
+    val sessions: String = "",
 ) {
+    /** Odcinki używania jako (start, koniec) w ms od początku dnia. */
+    fun sessionList(): List<Pair<Long, Long>> =
+        if (sessions.isEmpty()) emptyList() else sessions.split(";").mapNotNull { p ->
+            val i = p.indexOf('-')
+            if (i <= 0) null else {
+                val a = p.substring(0, i).toLongOrNull() ?: return@mapNotNull null
+                val b = p.substring(i + 1).toLongOrNull() ?: return@mapNotNull null
+                a * 1000 to b * 1000
+            }
+        }
+
     fun appList(): List<Pair<String, Long>> =
         apps.split(";").mapNotNull { p ->
             val i = p.lastIndexOf('=')

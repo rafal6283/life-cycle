@@ -280,7 +280,7 @@ interface ScreenOffDao {
 @Database(
     entities = [Category::class, Place::class, Entry::class, LocationSample::class, ScreenOff::class, Goal::class, StepBucket::class,
         HealthSample::class, ExtEvent::class, ScreenDay::class],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -344,9 +344,15 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE screen_days ADD COLUMN sessions TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun build(ctx: Context): AppDatabase =
             Room.databaseBuilder(ctx, AppDatabase::class.java, "lifecycle.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
     }
 }

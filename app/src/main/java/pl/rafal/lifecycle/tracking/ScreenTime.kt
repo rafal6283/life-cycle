@@ -76,6 +76,7 @@ object ScreenTime {
         var screenOns = 0
         var notifs = 0
         var firstUse: Long? = null
+        val sessions = ArrayList<LongArray>()
         var cur: String? = null
         var curStart = 0L
         var any = false
@@ -87,6 +88,8 @@ object ScreenTime {
             val b = minOf(t, to)
             if (b <= a || pkg in skip) return
             apps[pkg] = (apps[pkg] ?: 0L) + (b - a)
+            val last = sessions.lastOrNull()
+            if (last != null && a - last[1] < 60_000L) last[1] = maxOf(last[1], b) else sessions += longArrayOf(a, b)
             if (firstUse == null || a < firstUse!!) firstUse = a
             var x = a
             while (x < b) {
@@ -128,6 +131,7 @@ object ScreenTime {
             apps = top.joinToString(";") { "${it.key}=${it.value}" },
             hours = hours.joinToString(","),
             updatedAt = now,
+            sessions = sessions.sortedBy { it[0] }.joinToString(";") { "${(it[0] - from) / 1000}-${(it[1] - from) / 1000}" },
         )
     }
 

@@ -251,6 +251,7 @@ fun ScreenTimeDialog(initial: LocalDate, onDismiss: () -> Unit) {
                     }
                     SectionTitle("Godzina po godzinie")
                     TrendCard { HourBars24(d.hourList(), ScreenColor, 120.dp, d.day) }
+                    PhoneByActivityCard(d)
                     val apps = d.appList()
                     if (apps.isNotEmpty()) {
                         SectionTitle("Aplikacje")
@@ -382,6 +383,41 @@ fun ScreenTrendSection(period: Period) {
         if (apps.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
             apps.forEach { (pkg, ms) -> AppRow(pkg, ms / cur.size, avg, small = false) }
+        }
+    }
+}
+
+/** Na czym upływał czas z telefonem: praca, dom, sen, dojazd… */
+@Composable
+private fun PhoneByActivityCard(d: ScreenDay) {
+    val app = LifeApp.instance
+    val data by produceState<List<Pair<pl.rafal.lifecycle.data.Category?, Long>>>(emptyList(), d.day, d.updatedAt) {
+        val day = LocalDate.ofEpochDay(d.day)
+        val from = Fmt.dayStart(day)
+        val to = Fmt.dayStart(day.plusDays(1))
+        val cats = app.db.categories().getAll().associateBy { it.id }
+        val m = pl.rafal.lifecycle.domain.PhoneByActivity.compute(app.repo.getRange(from, to), listOf(d), System.currentTimeMillis())
+        value = m.toList().sortedByDescending { it.second }.map { (id, ms) -> cats[id] to ms }
+    }
+    if (data.isEmpty()) return
+    val total = data.sumOf { it.second }.coerceAtLeast(1L)
+    SectionTitle("Telefon wg aktywności")
+    Column(
+        Modifier.padding(horizontal = 16.dp).clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface).padding(horizontal = 14.dp, vertical = 6.dp)
+    ) {
+        data.filter { it.second >= 60_000L }.forEach { (c, ms) ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                CategoryBadge(c, 28.dp)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(c?.name ?: "Bez aktywności", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.height(3.dp))
+                    ShareBar(ms.toFloat() / total, ScreenColor)
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(Fmt.durationShort(ms), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }

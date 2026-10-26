@@ -403,7 +403,7 @@ object Backup {
         root.put("screen", JSONArray().apply {
             db.screen().range(0, Long.MAX_VALUE).forEach { d ->
                 put(JSONObject().put("d", d.day).put("ms", d.screenMs).put("u", d.unlocks).put("o", d.screenOns)
-                    .put("n", d.notifs).put("f", d.firstUse ?: JSONObject.NULL).put("a", d.apps).put("h", d.hours).put("t", d.updatedAt))
+                    .put("n", d.notifs).put("f", d.firstUse ?: JSONObject.NULL).put("a", d.apps).put("h", d.hours).put("t", d.updatedAt).put("s", d.sessions))
             }
         })
         root.put("goals", JSONArray().apply {
@@ -470,7 +470,7 @@ object Backup {
                     db.screen().upsert(
                         pl.rafal.lifecycle.data.ScreenDay(
                             x.getLong("d"), x.getLong("ms"), x.getInt("u"), x.getInt("o"), x.getInt("n"),
-                            x.optLongOrNull("f"), x.getString("a"), x.getString("h"), x.optLong("t"),
+                            x.optLongOrNull("f"), x.getString("a"), x.getString("h"), x.optLong("t"), x.optString("s", ""),
                         )
                     )
                 }
