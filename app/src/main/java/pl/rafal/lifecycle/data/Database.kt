@@ -119,6 +119,21 @@ interface ExtDao {
 data class ExtSourceInfo(val source: String, val label: String, val n: Int, val last: Long)
 
 @Dao
+interface ScreenDao {
+    @Query("SELECT * FROM screen_days WHERE day >= :from AND day < :to ORDER BY day")
+    fun observe(from: Long, to: Long): Flow<List<ScreenDay>>
+
+    @Query("SELECT * FROM screen_days WHERE day >= :from AND day < :to ORDER BY day")
+    suspend fun range(from: Long, to: Long): List<ScreenDay>
+
+    @Query("SELECT * FROM screen_days WHERE day = :day")
+    suspend fun get(day: Long): ScreenDay?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(d: ScreenDay)
+}
+
+@Dao
 interface GoalDao {
     @Query("SELECT * FROM goals ORDER BY id")
     fun observeAll(): Flow<List<Goal>>
@@ -264,8 +279,8 @@ interface ScreenOffDao {
 
 @Database(
     entities = [Category::class, Place::class, Entry::class, LocationSample::class, ScreenOff::class, Goal::class, StepBucket::class,
-        HealthSample::class, ExtEvent::class],
-    version = 4,
+        HealthSample::class, ExtEvent::class, ScreenDay::class],
+    version = 5,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -278,6 +293,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun steps(): StepDao
     abstract fun health(): HealthDao
     abstract fun ext(): ExtDao
+    abstract fun screen(): ScreenDao
 
     companion object {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -317,9 +333,20 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `screen_days` (`day` INTEGER NOT NULL, `screenMs` INTEGER NOT NULL, " +
+                        "`unlocks` INTEGER NOT NULL, `screenOns` INTEGER NOT NULL, `notifs` INTEGER NOT NULL, " +
+                        "`firstUse` INTEGER, `apps` TEXT NOT NULL, `hours` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`day`))"
+                )
+            }
+        }
+
         fun build(ctx: Context): AppDatabase =
             Room.databaseBuilder(ctx, AppDatabase::class.java, "lifecycle.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
     }
 }

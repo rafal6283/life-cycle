@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.Lifecycle
@@ -164,6 +165,23 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
                 tracking = it
                 prefs.tracking = it
                 if (it) TrackingControl.startIfAllowed(ctx) else TrackingControl.stop(ctx)
+            }
+            HorizontalDivider(Modifier.padding(start = 16.dp))
+            var screenOn by remember { mutableStateOf(prefs.screenTime) }
+            val screenAllowed = remember(tick) { pl.rafal.lifecycle.tracking.ScreenTime.hasPermission(ctx) }
+            SwitchRow(
+                "Czas przed ekranem",
+                if (!screenOn) "Wyłączone" else if (screenAllowed) "Czas w aplikacjach, odblokowania, powiadomienia"
+                else "Wymaga zgody „Dostęp do danych o użyciu” — dotknij poniżej",
+                screenOn,
+            ) {
+                screenOn = it
+                prefs.screenTime = it
+            }
+            if (screenOn && !screenAllowed) {
+                NavRow("Nadaj dostęp do danych o użyciu", null, MaterialTheme.colorScheme.error) {
+                    ctx.startActivity(pl.rafal.lifecycle.tracking.ScreenTime.settingsIntent(ctx))
+                }
             }
             HorizontalDivider(Modifier.padding(start = 16.dp))
             NavRow(
@@ -559,6 +577,40 @@ private fun CategoryEditorDialog(category: Category?, onDismiss: () -> Unit) {
                         }
                     }
                 }
+                Spacer(Modifier.height(16.dp))
+                Text("Własna ikona (emoji)", style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.height(8.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    listOf(
+                        "🪦", "🕯️", "💐", "⛪", "🎂", "🎄", "🎉", "🎁", "👶", "👵", "🐕", "🐈", "🏡", "🌳", "🎣", "⚽",
+                        "🏊", "🧘", "💈", "💅", "🦷", "🏥", "💊", "🍺", "🍷", "☕", "🍕", "🛒", "🧹", "🧺", "🔧", "🚗",
+                        "🛴", "🚲", "✈️", "🚆", "📚", "💻", "🎮", "🎬", "🎵", "🙏", "❤️", "😴",
+                    ).forEach { e ->
+                        val key = "emoji:$e"
+                        val sel = key == icon
+                        Box(
+                            Modifier.size(40.dp).clip(CircleShape)
+                                .background(if (sel) Color(color) else MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable { icon = key },
+                            contentAlignment = Alignment.Center,
+                        ) { Text(e, fontSize = 20.sp) }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                var custom by remember { mutableStateOf(if (isEmojiIcon(icon)) emojiOf(icon) else "") }
+                OutlinedTextField(
+                    value = custom,
+                    onValueChange = { v ->
+                        custom = v.trim().take(8)
+                        if (custom.isNotEmpty()) icon = "emoji:$custom"
+                    },
+                    label = { Text("Wpisz dowolne emoji z klawiatury") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 Spacer(Modifier.height(16.dp))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     if (deletable) {

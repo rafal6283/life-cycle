@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Accessibility
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.Healing
 import androidx.compose.material.icons.filled.Height
@@ -173,6 +174,104 @@ object CatIcons {
         "body" to Icons.Filled.Accessibility,
         "bone" to Icons.Filled.Healing,
         "height" to Icons.Filled.Height,
+        "local_florist" to Icons.Filled.LocalFlorist,
+        "yard" to Icons.Filled.Yard,
+        "account_balance" to Icons.Filled.AccountBalance,
+        "fireplace" to Icons.Filled.Fireplace,
+        "mosque" to Icons.Filled.Mosque,
+        "synagogue" to Icons.Filled.Synagogue,
+        "temple_buddhist" to Icons.Filled.TempleBuddhist,
+        "volunteer_activism" to Icons.Filled.VolunteerActivism,
+        "handshake" to Icons.Filled.Handshake,
+        "groups" to Icons.Filled.Groups,
+        "cake" to Icons.Filled.Cake,
+        "celebration" to Icons.Filled.Celebration,
+        "card_giftcard" to Icons.Filled.CardGiftcard,
+        "child_care" to Icons.Filled.ChildCare,
+        "toys" to Icons.Filled.Toys,
+        "computer" to Icons.Filled.Computer,
+        "laptop" to Icons.Filled.Laptop,
+        "phone_android" to Icons.Filled.PhoneAndroid,
+        "headphones" to Icons.Filled.Headphones,
+        "sports_esports" to Icons.Filled.SportsEsports,
+        "theaters" to Icons.Filled.Theaters,
+        "piano" to Icons.Filled.Piano,
+        "brush" to Icons.Filled.Brush,
+        "palette" to Icons.Filled.Palette,
+        "photo_camera" to Icons.Filled.PhotoCamera,
+        "mic" to Icons.Filled.Mic,
+        "podcasts" to Icons.Filled.Podcasts,
+        "code" to Icons.Filled.Code,
+        "science" to Icons.Filled.Science,
+        "biotech" to Icons.Filled.Biotech,
+        "hiking" to Icons.Filled.Hiking,
+        "directions_boat" to Icons.Filled.DirectionsBoat,
+        "sailing" to Icons.Filled.Sailing,
+        "kayaking" to Icons.Filled.Kayaking,
+        "surfing" to Icons.Filled.Surfing,
+        "rowing" to Icons.Filled.Rowing,
+        "nordic_walking" to Icons.Filled.NordicWalking,
+        "downhill_skiing" to Icons.Filled.DownhillSkiing,
+        "snowboarding" to Icons.Filled.Snowboarding,
+        "ice_skating" to Icons.Filled.IceSkating,
+        "sledding" to Icons.Filled.Sledding,
+        "skateboarding" to Icons.Filled.Skateboarding,
+        "sports_basketball" to Icons.Filled.SportsBasketball,
+        "sports_tennis" to Icons.Filled.SportsTennis,
+        "sports_volleyball" to Icons.Filled.SportsVolleyball,
+        "sports_martial_arts" to Icons.Filled.SportsMartialArts,
+        "sports_gymnastics" to Icons.Filled.SportsGymnastics,
+        "sports_motorsports" to Icons.Filled.SportsMotorsports,
+        "self_improvement" to Icons.Filled.SelfImprovement,
+        "bathtub" to Icons.Filled.Bathtub,
+        "kitchen" to Icons.Filled.Kitchen,
+        "local_pizza" to Icons.Filled.LocalPizza,
+        "fastfood" to Icons.Filled.Fastfood,
+        "icecream" to Icons.Filled.Icecream,
+        "bakery_dining" to Icons.Filled.BakeryDining,
+        "local_bar" to Icons.Filled.LocalBar,
+        "storefront" to Icons.Filled.Storefront,
+        "local_grocery_store" to Icons.Filled.LocalGroceryStore,
+        "local_pharmacy" to Icons.Filled.LocalPharmacy,
+        "medical_services" to Icons.Filled.MedicalServices,
+        "vaccines" to Icons.Filled.Vaccines,
+        "psychology" to Icons.Filled.Psychology,
+        "two_wheeler" to Icons.Filled.TwoWheeler,
+        "electric_scooter" to Icons.Filled.ElectricScooter,
+        "electric_bike" to Icons.Filled.ElectricBike,
+        "local_gas_station" to Icons.Filled.LocalGasStation,
+        "ev_station" to Icons.Filled.EvStation,
+        "local_parking" to Icons.Filled.LocalParking,
+        "garage" to Icons.Filled.Garage,
+        "car_repair" to Icons.Filled.CarRepair,
+        "build" to Icons.Filled.Build,
+        "handyman" to Icons.Filled.Handyman,
+        "construction" to Icons.Filled.Construction,
+        "agriculture" to Icons.Filled.Agriculture,
+        "grass" to Icons.Filled.Grass,
+        "forest" to Icons.Filled.Forest,
+        "landscape" to Icons.Filled.Landscape,
+        "terrain" to Icons.Filled.Terrain,
+        "cottage" to Icons.Filled.Cottage,
+        "house" to Icons.Filled.House,
+        "apartment" to Icons.Filled.Apartment,
+        "hotel" to Icons.Filled.Hotel,
+        "luggage" to Icons.Filled.Luggage,
+        "flight_takeoff" to Icons.Filled.FlightTakeoff,
+        "tram" to Icons.Filled.Tram,
+        "subway" to Icons.Filled.Subway,
+        "local_taxi" to Icons.Filled.LocalTaxi,
+        "mail" to Icons.Filled.Mail,
+        "local_post_office" to Icons.Filled.LocalPostOffice,
+        "account_balance_wallet" to Icons.Filled.AccountBalanceWallet,
+        "savings" to Icons.Filled.Savings,
+        "gavel" to Icons.Filled.Gavel,
+        "smoking_rooms" to Icons.Filled.SmokingRooms,
+        "wc" to Icons.Filled.Wc,
+        "checkroom" to Icons.Filled.Checkroom,
+        "local_laundry_service" to Icons.Filled.LocalLaundryService,
+        "cleaning_services" to Icons.Filled.CleaningServices,
+        "iron" to Icons.Filled.Iron,
         "donut" to Icons.Filled.DonutLarge,
         "bulb" to Icons.Filled.Lightbulb,
         "place" to Icons.Filled.Place,
@@ -211,13 +310,30 @@ fun rememberNow(): State<Long> = produceState(System.currentTimeMillis()) {
     }
 }
 
+/** Ikona kategorii: wbudowana (wektor) albo własna — emoji zapisane jako „emoji:🪦”. */
+fun isEmojiIcon(key: String?) = key?.startsWith("emoji:") == true
+fun emojiOf(key: String) = key.removePrefix("emoji:")
+
+@Composable
+fun CatIcon(key: String?, tint: Color, size: Dp) {
+    if (key != null && isEmojiIcon(key)) {
+        Text(
+            emojiOf(key),
+            fontSize = with(androidx.compose.ui.platform.LocalDensity.current) { (size * 0.82f).toSp() },
+            lineHeight = with(androidx.compose.ui.platform.LocalDensity.current) { size.toSp() },
+        )
+    } else {
+        Icon(CatIcons.get(key), null, tint = tint, modifier = Modifier.size(size))
+    }
+}
+
 @Composable
 fun CategoryBadge(cat: Category?, size: Dp = 36.dp) {
     Box(
         Modifier.size(size).clip(CircleShape).background(catColor(cat)),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(CatIcons.get(cat?.icon), null, tint = Color.White, modifier = Modifier.size(size * 0.55f))
+        CatIcon(cat?.icon, Color.White, size * 0.55f)
     }
 }
 
@@ -267,11 +383,7 @@ fun CategoryPicker(categories: List<Category>, selected: Long?, onSelect: (Long)
                     .padding(horizontal = 12.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    CatIcons.get(c.icon), null,
-                    tint = if (sel) Color.White else Color(c.color),
-                    modifier = Modifier.size(18.dp),
-                )
+                CatIcon(c.icon, if (sel) Color.White else Color(c.color), 18.dp)
                 Spacer(Modifier.width(6.dp))
                 Text(
                     c.name,

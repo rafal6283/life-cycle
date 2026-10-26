@@ -109,6 +109,7 @@ fun DayScreen(healthNav: () -> Unit = {}) {
     var adding by remember { mutableStateOf(false) }
     var drag by remember { mutableStateOf(0f) }
     var showMap by remember { mutableStateOf(false) }
+    var showScreen by remember { mutableStateOf(false) }
     var quick by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val override by repo.override.collectAsState(initial = null)
@@ -243,6 +244,10 @@ fun DayScreen(healthNav: () -> Unit = {}) {
                 Spacer(Modifier.height(10.dp))
                 HealthTodayCard(day) { healthNav() }
             }
+            item {
+                Spacer(Modifier.height(10.dp))
+                ScreenTimeCard(day) { showScreen = true }
+            }
 
             if (goalProgress.isNotEmpty()) {
                 item { SectionTitle(if (isToday) "Cele" else "Cele (stan na ten dzień)") }
@@ -302,6 +307,7 @@ fun DayScreen(healthNav: () -> Unit = {}) {
 
     editing?.let { EntryEditorDialog(entry = it, defaultDay = day, onDismiss = { editing = null }) }
     if (showMap) DayMapDialog(day) { showMap = false }
+    if (showScreen) ScreenTimeDialog(day) { showScreen = false }
     if (editStepGoal) StepGoalDialog { editStepGoal = false; stepGoalTick++ }
     if (quick) QuickSwitchDialog { quick = false }
     if (adding) EntryEditorDialog(entry = null, defaultDay = day, onDismiss = { adding = false })

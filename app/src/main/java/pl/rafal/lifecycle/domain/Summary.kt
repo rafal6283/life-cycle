@@ -200,6 +200,27 @@ object Summaries {
         }
         if (extRows.isNotEmpty()) sections += SumSection("Z innych aplikacji", "air", 0xFF8E44AD, extRows)
 
+        // --- Telefon (czas przed ekranem)
+        val screens = db.screen().range(prev.start.toEpochDay(), p.end.toEpochDay())
+        val sCur = screens.filter { it.day >= p.start.toEpochDay() }
+        if (sCur.isNotEmpty()) {
+            val sPrev = screens.filter { it.day < p.start.toEpochDay() }
+            val avg = sCur.sumOf { it.screenMs } / sCur.size
+            val pAvg = if (sPrev.isEmpty()) null else sPrev.sumOf { it.screenMs } / sPrev.size
+            val rows = mutableListOf(
+                SumRow("Dziennie", Fmt.durationShort(avg), dMs(avg, pAvg), pAvg?.let { avg <= it }, "phone_android", 0xFF5856D6.toInt()),
+                SumRow("Odblokowania dziennie", "${sCur.sumOf { it.unlocks } / sCur.size}"),
+                SumRow("Powiadomienia dziennie", "${sCur.sumOf { it.notifs } / sCur.size}"),
+            )
+            val longest = sCur.maxBy { it.screenMs }
+            rows += SumRow("Najwięcej", "${Fmt.durationShort(longest.screenMs)} · ${Fmt.dayTitle(LocalDate.ofEpochDay(longest.day)).lowercase()}")
+            sCur.flatMap { it.appList() }.groupBy { it.first }.mapValues { (_, l) -> l.sumOf { it.second } }
+                .toList().sortedByDescending { it.second }.take(3).forEach { (pkg, ms) ->
+                    rows += SumRow(pl.rafal.lifecycle.tracking.ScreenTime.appLabel(ctx, pkg), Fmt.durationShort(ms / sCur.size) + " / dzień")
+                }
+            sections += SumSection("Telefon", "phone_android", 0xFF5856D6, rows)
+        }
+
         // --- Zależności
         val farts = ExchangeImport.dailyCounts(ext, ExchangeImport.SRC_NIGHT, "")
         val insights = if (p.type == PeriodType.WEEK) emptyList() else HealthTrends.correlations(

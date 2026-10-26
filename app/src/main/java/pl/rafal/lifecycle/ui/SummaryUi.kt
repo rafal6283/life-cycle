@@ -200,7 +200,7 @@ private fun SummaryRowView(r: SumRow) {
                 Modifier.size(26.dp).clip(CircleShape).background(r.color?.let { Color(it) } ?: MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(CatIcons.get(r.icon), null, tint = if (r.color != null) Color.White else MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(15.dp))
+                CatIcon(r.icon, if (r.color != null) Color.White else MaterialTheme.colorScheme.onSurface, 15.dp)
             }
             Spacer(Modifier.width(10.dp))
         }

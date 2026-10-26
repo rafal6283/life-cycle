@@ -136,6 +136,8 @@ class DobaWidget : BaseDobaWidget() {
                     hs[Metric.ACTIVE_KCAL.key]?.sumOf { it.value }?.takeIf { it > 0 }?.let { parts += "🔥 ${Metric.ACTIVE_KCAL.format(it)} kcal" }
                     hs[Metric.BP.key]?.lastOrNull()?.let { parts += "${Metric.BP.format(it.value)}/${Metric.BP.format(it.v2 ?: 0.0)}" }
                     app.db.health().latest(Metric.WEIGHT.key)?.let { parts += "⚖ ${Metric.WEIGHT.format(it.value)} kg" }
+                    app.db.screen().get(today.toEpochDay())?.takeIf { it.screenMs > 0 && Prefs(ctx).screenTime }
+                        ?.let { parts += "📱 ${Fmt.durationShort(it.screenMs)}" }
                     if (ExtVisibility.fartsVisible) {
                         val ev = app.db.ext().all().filter { it.source == ExchangeImport.SRC_NIGHT && it.start in (from - 12 * 3_600_000L) until to }
                         ExchangeImport.dailyCounts(ev, ExchangeImport.SRC_NIGHT, "")[today]?.let { parts += "💨 $it" }

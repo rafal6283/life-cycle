@@ -181,3 +181,27 @@ data class ExtEvent(
     val end: Long? = null,
     val value: Double = 1.0,
 )
+
+/** Czas przed ekranem z jednego dnia (statystyki użycia Androida — te same co w Cyfrowej równowadze). */
+@Entity(tableName = "screen_days")
+data class ScreenDay(
+    @PrimaryKey val day: Long,
+    val screenMs: Long,
+    val unlocks: Int,
+    val screenOns: Int,
+    val notifs: Int,
+    val firstUse: Long?,
+    /** „pakiet=ms;pakiet=ms” — najczęściej używane aplikacje. */
+    val apps: String,
+    /** 24 wartości ms oddzielone przecinkami. */
+    val hours: String,
+    val updatedAt: Long,
+) {
+    fun appList(): List<Pair<String, Long>> =
+        apps.split(";").mapNotNull { p ->
+            val i = p.lastIndexOf('=')
+            if (i <= 0) null else p.substring(0, i) to (p.substring(i + 1).toLongOrNull() ?: 0L)
+        }
+
+    fun hourList(): List<Long> = hours.split(",").map { it.toLongOrNull() ?: 0L }.let { if (it.size == 24) it else List(24) { 0L } }
+}

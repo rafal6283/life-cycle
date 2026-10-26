@@ -302,6 +302,7 @@ class WatchdogWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
         safe("Import treningów") { WorkoutImporter.run(ctx) }
         safe("Import kroków") { StepsImporter.run(ctx) }
         safe("Pomiary zdrowotne") { HealthSync.run(ctx) }
+        safe("Czas przed ekranem") { ScreenTime.sync(ctx) }
         safe("Sprawdzanie celów") { GoalChecker.run(ctx) }
         safe("Podsumowanie tygodnia") { pl.rafal.lifecycle.domain.Summaries.maybeNotify(ctx) }
         safe("Kopia zapasowa") { Backup.autoBackup(ctx) }

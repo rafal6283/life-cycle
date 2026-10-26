@@ -130,6 +130,11 @@ class Prefs(ctx: Context) {
         get() = p.getInt("heightCm", 0)
         set(v) = p.edit().putInt("heightCm", v).apply()
 
+    /** Czas przed ekranem (statystyki użycia). */
+    var screenTime: Boolean
+        get() = p.getBoolean("screenTime", true)
+        set(v) = p.edit().putBoolean("screenTime", v).apply()
+
     var commutes: Boolean
         get() = p.getBoolean("commutes", true)
         set(v) = p.edit().putBoolean("commutes", v).apply()

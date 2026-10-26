@@ -186,15 +186,20 @@ fun AnimatedDonut(
                 val showText = g.sweep >= 20f
                 val text = if (showText) measurer.measure(g.slice.label, labelStyle) else null
                 val totalH = iconSize + (text?.size?.height ?: 0)
-                val icons = listOfNotNull(
-                    g.slice.iconKey?.let { painters[it] },
-                    g.slice.extraIcon?.let { painters[it] }?.takeIf { g.sweep >= 14f },
-                )
+                val icons = listOfNotNull(g.slice.iconKey, g.slice.extraIcon?.takeIf { g.sweep >= 14f })
                 val rowW = iconSize * icons.size + 2.dp.toPx() * (icons.size - 1).coerceAtLeast(0)
-                icons.forEachIndexed { k, painter ->
-                    translate(px - rowW / 2 + k * (iconSize + 2.dp.toPx()), py - totalH / 2) {
-                        with(painter) {
-                            draw(Size(iconSize, iconSize), alpha = alpha, colorFilter = ColorFilter.tint(Color.White))
+                icons.forEachIndexed { k, key ->
+                    val x0 = px - rowW / 2 + k * (iconSize + 2.dp.toPx())
+                    val y0 = py - totalH / 2
+                    if (isEmojiIcon(key)) {
+                        val et = measurer.measure(emojiOf(key), TextStyle(fontSize = (iconSize * 0.8f).toSp()))
+                        drawText(et, topLeft = Offset(x0 + (iconSize - et.size.width) / 2f, y0 + (iconSize - et.size.height) / 2f), alpha = alpha)
+                    } else {
+                        val painter = painters[key] ?: painters["unknown"] ?: return@forEachIndexed
+                        translate(x0, y0) {
+                            with(painter) {
+                                draw(Size(iconSize, iconSize), alpha = alpha, colorFilter = ColorFilter.tint(Color.White))
+                            }
                         }
                     }
                 }

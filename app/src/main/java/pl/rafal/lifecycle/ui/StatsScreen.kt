@@ -335,6 +335,8 @@ fun StatsScreen(onSummary: (String) -> Unit = {}, onHealth: () -> Unit = {}) {
             }
         }
 
+        item(key = "screen-$type-$startDay") { ScreenTrendSection(period) }
+
         if (healthTrends.isNotEmpty()) {
             item { SectionTitle("Zdrowie · " + if (type == PeriodType.YEAR) "średnio w miesiącach" else "średnio vs poprzedni okres") }
             item { HealthTrendsCard(healthTrends, emptyList(), "$type-$startDay", onHealth) }

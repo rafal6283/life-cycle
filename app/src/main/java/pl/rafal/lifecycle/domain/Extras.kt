@@ -400,6 +400,12 @@ object Backup {
                     .put("b", x.end ?: JSONObject.NULL).put("v", x.value))
             }
         })
+        root.put("screen", JSONArray().apply {
+            db.screen().range(0, Long.MAX_VALUE).forEach { d ->
+                put(JSONObject().put("d", d.day).put("ms", d.screenMs).put("u", d.unlocks).put("o", d.screenOns)
+                    .put("n", d.notifs).put("f", d.firstUse ?: JSONObject.NULL).put("a", d.apps).put("h", d.hours).put("t", d.updatedAt))
+            }
+        })
         root.put("goals", JSONArray().apply {
             db.goals().getAll().forEach { g ->
                 put(JSONObject().put("id", g.id).put("categoryId", g.categoryId).put("type", g.type)
@@ -458,6 +464,17 @@ object Backup {
                 )
             }
             db.entries().insertAll(list)
+            root.optJSONArray("screen")?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    val x = arr.getJSONObject(i)
+                    db.screen().upsert(
+                        pl.rafal.lifecycle.data.ScreenDay(
+                            x.getLong("d"), x.getLong("ms"), x.getInt("u"), x.getInt("o"), x.getInt("n"),
+                            x.optLongOrNull("f"), x.getString("a"), x.getString("h"), x.optLong("t"),
+                        )
+                    )
+                }
+            }
             val ext = root.optJSONArray("ext")
             if (ext != null) {
                 db.ext().deleteAll()
