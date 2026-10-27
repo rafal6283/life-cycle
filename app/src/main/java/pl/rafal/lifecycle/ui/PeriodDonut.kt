@@ -212,12 +212,24 @@ fun PeriodDonutScreen(index: Int, onPeriod: (Int) -> Unit) {
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                                val ph = phoneByCat[id] ?: 0L
+                                if (ph >= 60_000L && screens.isNotEmpty()) {
+                                    Text(
+                                        "📱 ${Fmt.durationShort(ph / screens.size)} / dzień",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF7D7AFF),
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
-        } else if (s != null) {
+        }
+        if (screenOn) {
+            item(key = "screen-$type-$startDay") { ScreenTrendSection(period) }
+        }
+        if (s != null && sorted.isEmpty()) {
             item {
                 Text(
                     "Brak danych w tym okresie.",
