@@ -98,6 +98,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // kopia / wysyłka podglądu, jeśli pora (w tle, nie blokuje)
+        pl.rafal.koofr.Koofr.autoRunAsync()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleImport(intent)
@@ -212,6 +218,7 @@ fun AppRoot(startTab: String?) {
                 sub == "categories" -> CategoriesScreen(onBack = { sub = null })
                 sub == "permissions" -> PermissionsScreen(onBack = { sub = null })
                 sub == "goals" -> GoalsScreen(onBack = { sub = null })
+                sub == "koofr" -> pl.rafal.koofr.KoofrScreen(onBack = { sub = null })
                 sub?.startsWith("summary") == true -> SummaryScreen(sub) { sub = null }
                 tab == Tab.DAY -> DayScreen { tab = Tab.HEALTH }
                 tab == Tab.STATS -> StatsScreen(onSummary = { sub = it }, onHealth = { tab = Tab.HEALTH })

@@ -75,4 +75,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("androidx.health.connect:connect-client:1.1.0-alpha07")
     implementation("org.osmdroid:osmdroid-android:6.1.20")
+    // kopia i podgląd na rodzinnym Koofr (WebDAV)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 }

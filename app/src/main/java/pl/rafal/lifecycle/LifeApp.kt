@@ -47,6 +47,8 @@ class LifeApp : Application() {
         }
         pl.rafal.lifecycle.tracking.StepsRecorder.fixedSince(this)
         WatchdogWorker.schedule(this)
+        // kopia i podgląd na rodzinnym Koofr (szyfrowane na telefonie)
+        pl.rafal.koofr.Koofr.init(this, pl.rafal.lifecycle.cloud.DobaCloud)
     }
 
     companion object {

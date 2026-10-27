@@ -304,6 +304,10 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
 
         SectionTitle("Kopia zapasowa")
         Group {
+            NavRow("Kopia i rodzina (Koofr)", "Szyfrowana kopia na rodzinnym koncie i podgląd doby domowników — za zgodą obu stron") {
+                onOpen("koofr")
+            }
+            HorizontalDivider(Modifier.padding(start = 16.dp))
             NavRow(
                 "Automatyczna kopia codziennie",
                 if (backupTree == null) "Wybierz folder (np. Synology Drive, dysk sieciowy)"
