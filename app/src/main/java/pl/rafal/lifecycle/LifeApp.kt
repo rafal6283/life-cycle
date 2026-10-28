@@ -41,7 +41,14 @@ class LifeApp : Application() {
         appScope.launch {
             repo.ensureDefaults()
             repo.categoryByKind(pl.rafal.lifecycle.data.Kind.COMMUTE)
-            repo.categoryByKind(pl.rafal.lifecycle.data.Kind.FIELD)
+            repo.categoryByKind(pl.rafal.lifecycle.data.Kind.FIELD).let { c ->
+                // Dawna nazwa domyślna — zamień na uniwersalną (nazwy ustawionej przez użytkownika nie ruszamy).
+                if (c.name == "Serwis u klienta") {
+                    LifeApp.instance.db.categories().update(
+                        c.copy(name = "Wizyta u klienta", icon = if (c.icon == "handyman") "handshake" else c.icon)
+                    )
+                }
+            }
             repo.categoryByKind(pl.rafal.lifecycle.data.Kind.SCHOOL)
             repo.categoryByKind(pl.rafal.lifecycle.data.Kind.STOP)
         }

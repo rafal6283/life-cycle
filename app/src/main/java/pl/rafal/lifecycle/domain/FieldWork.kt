@@ -17,7 +17,7 @@ import java.time.YearMonth
 import java.util.Locale
 
 /**
- * Praca w terenie (np. serwis u klientów): w ustawione dni i godziny nowe, nienazwane pobyty to wizyty
+ * Praca w terenie (np. wizyty u klientów: serwis, sprzedaż, opieka): w ustawione dni i godziny nowe, nienazwane pobyty to wizyty
  * u klienta. Raport dnia: wizyty, przejazdy między nimi i kilometry; kilometrówka miesięczna z eksportem CSV.
  */
 object FieldWork {

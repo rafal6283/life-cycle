@@ -573,7 +573,7 @@ private fun NotClientDialog(count: Int, address: String, onDismiss: () -> Unit, 
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
-                        "Wcześniejsze i kolejne postoje tutaj dostaną tę kategorię zamiast „Serwis u klienta”.",
+                        "Wcześniejsze i kolejne postoje tutaj dostaną tę kategorię zamiast „Wizyta u klienta”.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

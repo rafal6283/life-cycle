@@ -122,7 +122,7 @@ object DefaultCategories {
         c("Rozrywka", 0xFF8E44AD, "fun", Kind.CUSTOM, 11),
         c("Nauka", 0xFF007AFF, "study", Kind.CUSTOM, 12),
         c("Dojazd", 0xFF7A8794, "commute", Kind.COMMUTE, 13),
-        c("Serwis u klienta", 0xFF0A84FF, "handyman", Kind.FIELD, 14),
+        c("Wizyta u klienta", 0xFF0A84FF, "handshake", Kind.FIELD, 14),
         Category(name = "Szkoła / przedszkole", color = 0xFFFFB300.toInt(), icon = "emoji:🎒", kind = Kind.SCHOOL, sortOrder = 15),
         c("Postój w trasie", 0xFF8E9AAF, "local_parking", Kind.STOP, 16),
         c("Nieznane", 0xFFA0A0A8, "unknown", Kind.UNKNOWN, 99),
