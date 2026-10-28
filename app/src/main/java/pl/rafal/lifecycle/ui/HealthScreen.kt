@@ -29,6 +29,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -438,7 +439,7 @@ private fun ExtCard(
     val recent = days.takeLast(7).map { counts[it] ?: 0 }
     Column(
         Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp))
-            .background(MaterialTheme.colorScheme.surface).clickable(onClick = onClick).padding(14.dp)
+            .background(MaterialTheme.colorScheme.surface).importedBorder().clickable(onClick = onClick).padding(14.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(30.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) {
@@ -448,11 +449,12 @@ private fun ExtCard(
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "${ExchangeImport.sourceLabel(source, label)} · import ${Fmt.dateTime(last)}",
+                    "import ${Fmt.dateTime(last)}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            ImportedTag(source)
         }
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.Bottom) {
@@ -842,7 +844,18 @@ fun HealthTodayCard(day: LocalDate, onOpen: () -> Unit) {
         ) {
             chips.forEach { (m, text) ->
                 val c = m?.let { Color(it.color) } ?: Color(0xFF8E44AD)
-                Text(
+                if (m == null) {
+                    // zaimportowane (Rytm Snu): obwódka i ikona łącza zamiast wypełnienia
+                    Row(
+                        Modifier.clip(RoundedCornerShape(50)).importedBorder(RoundedCornerShape(50))
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(androidx.compose.material.icons.Icons.Filled.Link, "z Rytmu Snu", tint = c, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(text, style = MaterialTheme.typography.labelLarge, color = c)
+                    }
+                } else Text(
                     text,
                     style = MaterialTheme.typography.labelLarge,
                     color = c,
