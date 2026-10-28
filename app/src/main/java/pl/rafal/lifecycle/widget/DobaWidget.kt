@@ -140,7 +140,7 @@ class DobaWidget : BaseDobaWidget() {
                         ?.let { parts += "📱 ${Fmt.durationShort(it.screenMs)}" }
                     if (ExtVisibility.fartsVisible) {
                         val ev = app.db.ext().all().filter { it.source == ExchangeImport.SRC_NIGHT && it.start in (from - 12 * 3_600_000L) until to }
-                        ExchangeImport.dailyCounts(ev, ExchangeImport.SRC_NIGHT, "")[today]?.let { parts += "💨 $it" }
+                        ExchangeImport.dailyCounts(ev, ExchangeImport.SRC_NIGHT, "")[today]?.let { parts += "FF $it" }
                     }
 
                     return DayData(

@@ -92,7 +92,7 @@ object HealthTrends {
             Outcome("ciśnienie skurczowe", "mmHg", 4.0, true, daily(Metric.BP), 0),
             Outcome("średnie tętno", "bpm", 3.0, null, daily(Metric.HR), 0),
             Outcome("liczba oddechów", "/min", 0.6, null, daily(Metric.RESP), 1, feminine = true),
-            Outcome("liczba wiatrów w nocy", "", 1.0, null, farts.mapValues { it.value.toDouble() }, 1, feminine = true),
+            Outcome("liczba FF w nocy", "", 1.0, null, farts.mapValues { it.value.toDouble() }, 1, feminine = true),
         ).filter { o -> days.count { it in o.values } >= 8 }
         if (outcomes.isEmpty()) return emptyList()
 

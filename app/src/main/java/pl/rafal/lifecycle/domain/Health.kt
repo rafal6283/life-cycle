@@ -174,7 +174,7 @@ object ExchangeImport {
             return "Zaimportowano z ${sourceLabel(source, label)}, ale to źródło jest ukryte — włącz je w Ustawieniach → Dane z innych aplikacji"
         }
         return "Zaimportowano z ${sourceLabel(source, label)}: " + when (source) {
-            SRC_NIGHT -> "$n wiatrów, ${out.count { it.type == "window" }} nocy"
+            SRC_NIGHT -> "FF: $n, nocy: ${out.count { it.type == "window" }}"
             SRC_ECG -> "$n epizodów AF"
             else -> "$n kliknięć, ${out.count { it.type == "day_total" }} dni"
         }

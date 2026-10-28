@@ -190,7 +190,7 @@ object Summaries {
             val pr = counts.filterKeys { it >= prev.start && it < prev.end }
             if (cur.isEmpty()) return@forEach
             val name = when (src) {
-                ExchangeImport.SRC_NIGHT -> "Wiatry nocne"
+                ExchangeImport.SRC_NIGHT -> "FF w nocy"
                 ExchangeImport.SRC_ECG -> "Epizody AF"
                 else -> "Licznik $label"
             }

@@ -343,9 +343,10 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
             val hiddenExt by pl.rafal.lifecycle.domain.ExtVisibility.hidden.collectAsState()
             val extSources by remember { pl.rafal.lifecycle.LifeApp.instance.db.ext().observeSources() }
                 .collectAsState(initial = emptyList())
-            SwitchRow(
-                "Wiatry",
-                "Dane z Rytmu Snu. Wyłączone znikają z całej aplikacji (zostają tylko w kopii zapasowej).",
+            // Rytm Snu (FF) — przełącznik widoczny dopiero, gdy są z niego dane
+            if (extSources.any { it.source == pl.rafal.lifecycle.domain.ExchangeImport.SRC_NIGHT }) SwitchRow(
+                "FF (Rytm Snu)",
+                "Wyłączone znikają z całej aplikacji (zostają tylko w kopii zapasowej).",
                 pl.rafal.lifecycle.domain.ExtVisibility.FARTS !in hiddenExt,
             ) { pl.rafal.lifecycle.domain.ExtVisibility.set(ctx, pl.rafal.lifecycle.domain.ExchangeImport.SRC_NIGHT, "", it) }
             extSources.filter { it.source != pl.rafal.lifecycle.domain.ExchangeImport.SRC_NIGHT }

@@ -253,8 +253,7 @@ fun HealthScreen() {
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    (if (pl.rafal.lifecycle.domain.ExtVisibility.FARTS in hiddenExt) "Liczniki z Kreski albo epizody AF z Polar EKG. "
-                    else "Wiatry z Rytmu Snu, liczniki z Kreski albo epizody AF z Polar EKG. ") +
+                    "Rytm Snu, liczniki z Kreski albo epizody AF z Polar EKG. " +
                         "W tamtej aplikacji wybierz eksport i „Udostępnij → Doba” albo zapisz plik i wskaż go tutaj. " +
                         "Ponowny import zastępuje poprzednie dane z tego źródła.",
                     style = MaterialTheme.typography.bodySmall,
@@ -432,7 +431,7 @@ private fun ExtCard(
         else -> Color(0xFFFF9F0A)
     }
     val title = when (source) {
-        ExchangeImport.SRC_NIGHT -> "Wiatry nocne"
+        ExchangeImport.SRC_NIGHT -> "FF w nocy"
         ExchangeImport.SRC_ECG -> "Epizody AF"
         else -> "Licznik $label"
     }
@@ -827,7 +826,7 @@ fun HealthTodayCard(day: LocalDate, onOpen: () -> Unit) {
         byM[Metric.WEIGHT.key].orEmpty().maxByOrNull { it.time }?.let { out += Metric.WEIGHT to "${Metric.WEIGHT.format(it.value)} kg" }
         today(Metric.SPO2).lastOrNull()?.let { out += Metric.SPO2 to "SpO₂ ${Metric.SPO2.format(it.value)}%" }
         val farts = ExchangeImport.dailyCounts(ext, ExchangeImport.SRC_NIGHT, "")[day]
-        if (farts != null) out += null to "💨 $farts w nocy"
+        if (farts != null) out += null to "FF $farts w nocy"
         out
     }
     if (chips.isEmpty()) return

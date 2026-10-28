@@ -79,7 +79,7 @@ object DobaCloud : KoofrApp {
 
     override val exchange: KoofrExchange = object : KoofrExchange {
         override val sources = listOf(
-            "rytm-snu" to "Rytm Snu (wiatry w nocy)",
+            "rytm-snu" to "Rytm Snu (FF w nocy)",
             "kreska" to "Kreska (udostępnione liczniki)",
             "polar-ekg" to "Polar EKG (epizody AF)",
         )
