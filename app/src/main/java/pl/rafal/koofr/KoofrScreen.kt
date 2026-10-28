@@ -250,6 +250,8 @@ fun KoofrScreen(onBack: () -> Unit) {
                             Modifier.padding(16.dp, 4.dp, 16.dp, 14.dp))
                     }
 
+                    app.exchange?.let { ex -> ExchangeSection(ex, working) { ok, f -> act(ok) { f() } } }
+
                     app.sharing?.let { sh ->
                         SharingSection(sh, members.filter { it.id != sync.userId }, links, consents, working,
                             act = { ok, f -> act(ok) { f() } },
@@ -696,5 +698,35 @@ private fun SwitchItem(title: String, subtitle: String?, checked: Boolean, onCha
             if (subtitle != null) Muted(subtitle)
         }
         Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+
+// ------------------------------------------------------------ wymiana między aplikacjami
+
+@Composable
+private fun ExchangeSection(ex: KoofrExchange, working: Boolean, act: (String?, suspend () -> Unit) -> Unit) {
+    val last by Koofr.lastExchange.collectAsState()
+    val on = Koofr.exchangeOn()
+    SectionHead("Wymiana z moimi aplikacjami")
+    Card {
+        SwitchItem("Automatyczna wymiana danych", "Przez Koofr, bez ręcznego eksportu plików. Widzą je tylko Twoje aplikacje (ten sam kod odzyskiwania).", on) {
+            Koofr.setExchangeOn(it)
+        }
+        if (on) {
+            ex.publishes?.let { what ->
+                Div()
+                SwitchItem("Udostępniaj moim aplikacjom", what, Koofr.publishOn()) { Koofr.setPublishOn(it) }
+            }
+            ex.sources.forEach { (prefix, label) ->
+                Div()
+                SwitchItem("Pobieraj: $label", null, Koofr.sourceOn(prefix)) { Koofr.setSourceOn(prefix, it) }
+            }
+            ex.ExtraSettings()
+            Div()
+            RowItem("Wymień teraz", last?.let { "Ostatnio: $it" } ?: "Automatycznie przy otwarciu aplikacji i w tle") {
+                if (!working) act(null) { Koofr.lastExchange.value = Koofr.exchangeNow(force = true) }
+            }
+        }
     }
 }

@@ -78,6 +78,28 @@ interface KoofrApp {
 
     /** Podgląd danych między osobami (tylko w niektórych aplikacjach). */
     val sharing: KoofrSharing? get() = null
+
+    /** Wymiana danych z innymi aplikacjami tej samej osoby (null = aplikacja nic nie wymienia). */
+    val exchange: KoofrExchange? get() = null
+}
+
+/** Automatyczna wymiana plików „wymiana-zdarzen” między moimi aplikacjami przez Koofr. */
+interface KoofrExchange {
+    /** Co ta aplikacja może udostępniać (opis do ustawień), np. „wiatry wykryte w nocy”; null = nic. */
+    val publishes: String? get() = null
+
+    /** Źródła do pobierania: przedrostek nazwy pliku → opis (np. "rytm-snu" → „Rytm Snu: wiatry”). */
+    val sources: List<Pair<String, String>> get() = emptyList()
+
+    /** Pliki do opublikowania: nazwa → treść; null treści = usuń plik z Koofr. */
+    suspend fun export(ctx: Context): Map<String, ByteArray?> = emptyMap()
+
+    /** Wczytanie pobranego pliku (zastępuje poprzednie dane z tego źródła). */
+    suspend fun import(ctx: Context, name: String, data: ByteArray) {}
+
+    /** Dodatkowe ustawienia aplikacji w sekcji wymiany (np. które liczniki udostępniać). */
+    @Composable
+    fun ExtraSettings() {}
 }
 
 interface KoofrSharing {
@@ -129,6 +151,55 @@ object Koofr {
         }
     }
 
+    // ------------------------------------------------------------ wymiana
+
+    fun exchangeOn(): Boolean = sync.store.read("ks.ex.on") == "1"
+    fun setExchangeOn(v: Boolean) {
+        sync.store.write("ks.ex.on", if (v) "1" else "0")
+        version.value++
+        if (v) autoRunAsync(true)
+    }
+
+    fun publishOn(): Boolean = sync.store.read("ks.ex.publish") != "0"
+    fun setPublishOn(v: Boolean) {
+        sync.store.write("ks.ex.publish", if (v) "1" else "0")
+        version.value++
+        autoRunAsync(true)
+    }
+
+    fun sourceOn(prefix: String): Boolean = sync.store.read("ks.ex.src.$prefix") != "0"
+    fun setSourceOn(prefix: String, v: Boolean) {
+        sync.store.write("ks.ex.src.$prefix", if (v) "1" else "0")
+        version.value++
+        if (v) autoRunAsync(true)
+    }
+
+    val lastExchange = MutableStateFlow<String?>(null)
+    private var lastExchangeRun = 0L
+
+    /** Publikuje i pobiera dane wymiany. Zwraca opis dla użytkownika. */
+    suspend fun exchangeNow(force: Boolean = false): String = withContext(Dispatchers.IO) {
+        val ex = app.exchange ?: return@withContext ""
+        if (!sync.ready() || !exchangeOn()) return@withContext ""
+        val sent = ArrayList<String>()
+        if (ex.publishes != null) {
+            for ((name, data) in ex.export(appCtx)) {
+                if (data == null || !publishOn()) sync.removeExchange(name)
+                else if (sync.publishExchange(name, data, force)) sent += name
+            }
+        }
+        val got = if (ex.sources.isEmpty()) emptyList() else sync.pullExchange({ n ->
+            ex.sources.any { (p, _) -> (n == p || n.startsWith("$p-")) && sourceOn(p) }
+        }, { n, d -> kotlinx.coroutines.runBlocking { ex.import(appCtx, n, d) } }, force)
+        lastExchangeRun = System.currentTimeMillis()
+        val msg = listOfNotNull(
+            if (sent.isNotEmpty()) "wysłano: ${sent.joinToString()}" else null,
+            if (got.isNotEmpty()) "pobrano: ${got.joinToString()}" else null,
+        ).joinToString(" · ").ifEmpty { "bez zmian" }
+        lastExchange.value = msg
+        msg
+    }
+
     fun wifiOnly(): Boolean = sync.store.read("ks.wifiOnly") != "0"
     fun setWifiOnly(v: Boolean) {
         sync.store.write("ks.wifiOnly", if (v) "1" else "0")
@@ -162,6 +233,10 @@ object Koofr {
         if (!initialized || busy.value || app.busy) return
         try {
             if (!sync.ready()) return
+            // wymiana: małe pliki, także bez Wi-Fi; co najmniej co 15 min
+            if (app.exchange != null && exchangeOn() && (forcePublish || System.currentTimeMillis() - lastExchangeRun > 15 * 60_000L)) {
+                exchangeNow()
+            }
             val wantBackup = sync.backupDue(20 * 3600_000L)
             val wantPublish = app.sharing != null && sync.myConsents().isNotEmpty() &&
                 (forcePublish || System.currentTimeMillis() - lastPublish > 15 * 60_000L)

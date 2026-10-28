@@ -45,6 +45,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import pl.rafal.koofr.KoofrApp
+import pl.rafal.koofr.KoofrExchange
 import pl.rafal.koofr.KoofrSharing
 import pl.rafal.koofr.KoofrSync
 import pl.rafal.lifecycle.LifeApp
@@ -75,6 +76,18 @@ object DobaCloud : KoofrApp {
     }
 
     override val sharing: KoofrSharing = DobaSharing
+
+    override val exchange: KoofrExchange = object : KoofrExchange {
+        override val sources = listOf(
+            "rytm-snu" to "Rytm Snu (wiatry w nocy)",
+            "kreska" to "Kreska (udostępnione liczniki)",
+            "polar-ekg" to "Polar EKG (epizody AF)",
+        )
+
+        override suspend fun import(ctx: Context, name: String, data: ByteArray) {
+            pl.rafal.lifecycle.domain.ExchangeImport.importText(String(data, Charsets.UTF_8))
+        }
+    }
 }
 
 object DobaSharing : KoofrSharing {

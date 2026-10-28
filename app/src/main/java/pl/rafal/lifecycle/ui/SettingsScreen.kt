@@ -345,7 +345,7 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
                 .collectAsState(initial = emptyList())
             SwitchRow(
                 "Wiatry",
-                "Dane z Nocnego licznika. Wyłączone znikają z całej aplikacji (zostają tylko w kopii zapasowej).",
+                "Dane z Rytmu Snu. Wyłączone znikają z całej aplikacji (zostają tylko w kopii zapasowej).",
                 pl.rafal.lifecycle.domain.ExtVisibility.FARTS !in hiddenExt,
             ) { pl.rafal.lifecycle.domain.ExtVisibility.set(ctx, pl.rafal.lifecycle.domain.ExchangeImport.SRC_NIGHT, "", it) }
             extSources.filter { it.source != pl.rafal.lifecycle.domain.ExchangeImport.SRC_NIGHT }

@@ -254,7 +254,7 @@ fun HealthScreen() {
                 Spacer(Modifier.height(4.dp))
                 Text(
                     (if (pl.rafal.lifecycle.domain.ExtVisibility.FARTS in hiddenExt) "Liczniki z Kreski albo epizody AF z Polar EKG. "
-                    else "Wiatry z Nocnego licznika, liczniki z Kreski albo epizody AF z Polar EKG. ") +
+                    else "Wiatry z Rytmu Snu, liczniki z Kreski albo epizody AF z Polar EKG. ") +
                         "W tamtej aplikacji wybierz eksport i „Udostępnij → Doba” albo zapisz plik i wskaż go tutaj. " +
                         "Ponowny import zastępuje poprzednie dane z tego źródła.",
                     style = MaterialTheme.typography.bodySmall,

@@ -109,7 +109,7 @@ class MainActivity : ComponentActivity() {
         handleImport(intent)
     }
 
-    /** Plik „wymiana-zdarzen” udostępniony z Nocnego licznika, Kreski lub Polar EKG. */
+    /** Plik „wymiana-zdarzen” udostępniony z Rytmu Snu, Kreski lub Polar EKG. */
     private fun handleImport(i: Intent?): Boolean {
         val uri: Uri = when (i?.action) {
             Intent.ACTION_SEND -> if (Build.VERSION.SDK_INT >= 33) {

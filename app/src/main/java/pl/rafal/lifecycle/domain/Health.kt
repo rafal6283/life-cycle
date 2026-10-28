@@ -95,16 +95,18 @@ object HealthAgg {
 }
 
 // ---------------------------------------------------------------------------
-// Import plików „wymiana-zdarzen” (Nocny licznik, Kreska, Polar EKG)
+// Import plików „wymiana-zdarzen” (Rytm Snu — dawniej Nocny licznik, Kreska, Polar EKG)
 // ---------------------------------------------------------------------------
 
 object ExchangeImport {
+    /** Rytm Snu (dawniej Nocny licznik). W bazie zostaje stary identyfikator, nowe pliki mają "rytm-snu". */
     const val SRC_NIGHT = "nocny-licznik"
+    const val SRC_NIGHT_NEW = "rytm-snu"
     const val SRC_KRESKA = "kreska"
     const val SRC_ECG = "polar-ekg"
 
     fun sourceLabel(source: String, label: String): String = when (source) {
-        SRC_NIGHT -> "Nocny licznik"
+        SRC_NIGHT -> "Rytm Snu"
         SRC_KRESKA -> "Kreska" + if (label.isNotBlank()) ": $label" else ""
         SRC_ECG -> "Polar EKG"
         else -> source
@@ -132,9 +134,9 @@ object ExchangeImport {
             throw IllegalArgumentException("To kopia zapasowa Doby — przywróć ją w Ustawieniach → Kopia zapasowa")
         }
         if (j.optString("format") != "wymiana-zdarzen") {
-            throw IllegalArgumentException("To nie jest plik z Nocnego licznika, Kreski ani Polar EKG")
+            throw IllegalArgumentException("To nie jest plik z Rytmu Snu, Kreski ani Polar EKG")
         }
-        val source = j.optString("source")
+        val source = j.optString("source").let { if (it == SRC_NIGHT_NEW) SRC_NIGHT else it }
         if (source !in setOf(SRC_NIGHT, SRC_KRESKA, SRC_ECG)) {
             throw IllegalArgumentException(if (source == "doba") "To eksport z Doby" else "Nieznane źródło: $source")
         }
@@ -196,14 +198,14 @@ object ExchangeImport {
 fun Double.fmt1(): String = String.format(Locale.forLanguageTag("pl-PL"), "%.1f", this)
 
 /**
- * Które importowane źródła pokazywać. Ukryte źródło (np. wiatry z Nocnego licznika) znika ze wszystkich
+ * Które importowane źródła pokazywać. Ukryte źródło (np. wiatry z Rytmu Snu) znika ze wszystkich
  * ekranów, podsumowań i zależności; dane zostają w bazie i kopii, więc można je w każdej chwili przywrócić.
  */
 object ExtVisibility {
     private const val PREFS = "ext_visibility"
     private const val KEY = "hidden"
 
-    /** Wiatry z Nocnego licznika — przełącznik „Wiatry” w Ustawieniach. */
+    /** Wiatry z Rytmu Snu — przełącznik „Wiatry” w Ustawieniach. */
     val FARTS = ExchangeImport.SRC_NIGHT + "|"
 
     val hidden: kotlinx.coroutines.flow.MutableStateFlow<Set<String>> by lazy {

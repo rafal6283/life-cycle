@@ -580,6 +580,71 @@ public final class KoofrSync {
         return c.get(Calendar.YEAR) + "-" + c.get(Calendar.DAY_OF_YEAR);
     }
 
+    // ------------------------------------------------------------ wymiana między aplikacjami
+
+    private String myExchange() {
+        return root() + "/_wymiana/" + userId;
+    }
+
+    /** Publikuje plik wymiany, jeśli treść zmieniła się od ostatniej publikacji z tego telefonu. */
+    public boolean publishExchange(String name, byte[] data, boolean force) throws KsException {
+        requireReady();
+        String digest = KsCrypto.hex(Arrays.copyOf(KsCrypto.sha256(data), 16));
+        String key = K + "ex.pub." + userId + "." + name;
+        if (!force && digest.equals(store.read(key))) return false;
+        dav().putAtomic(myExchange() + "/" + name + ".ksy", crypto.sealExchange(data));
+        store.write(key, digest);
+        return true;
+    }
+
+    public void removeExchange(String name) throws KsException {
+        requireReady();
+        dav().delete(myExchange() + "/" + name + ".ksy");
+        store.delete(K + "ex.pub." + userId + "." + name);
+    }
+
+    /** Pliki wymiany tej osoby: nazwa → wpis (czas zmiany, rozmiar). */
+    public Map<String, WebDav.Entry> exchangeFiles() throws KsException {
+        requireReady();
+        Map<String, WebDav.Entry> out = new LinkedHashMap<>();
+        for (WebDav.Entry e : dav().list(myExchange())) {
+            if (!e.isDir && e.name.endsWith(".ksy")) out.put(e.name.substring(0, e.name.length() - 4), e);
+        }
+        return out;
+    }
+
+    public interface ExchangeFilter {
+        boolean want(String name);
+    }
+
+    public interface ExchangeHandler {
+        void handle(String name, byte[] data) throws Exception;
+    }
+
+    /** Pobiera zmienione pliki wymiany, które przepuszcza filtr; zwraca nazwy przetworzonych. */
+    public List<String> pullExchange(ExchangeFilter filter, ExchangeHandler handler, boolean force) throws KsException {
+        requireReady();
+        List<String> done = new ArrayList<>();
+        for (Map.Entry<String, WebDav.Entry> e : exchangeFiles().entrySet()) {
+            if (!filter.want(e.getKey())) continue;
+            String stamp = (e.getValue().modified == null ? 0 : e.getValue().modified) + "/" + e.getValue().size;
+            String key = K + "ex.seen." + userId + "." + e.getKey();
+            if (!force && stamp.equals(store.read(key))) continue;
+            byte[] f = dav().get(myExchange() + "/" + e.getKey() + ".ksy");
+            if (f == null) continue;
+            try {
+                handler.handle(e.getKey(), crypto.openExchange(f));
+            } catch (KsException ex) {
+                throw ex;
+            } catch (Exception ex) {
+                throw new KsException("Nie udało się wczytać „" + e.getKey() + "”: " + ex.getMessage());
+            }
+            store.write(key, stamp);
+            done.add(e.getKey());
+        }
+        return done;
+    }
+
     // ------------------------------------------------------------ podgląd za zgodą
 
     private static final String OWNER_FILE = "wlasciciel.json", VIEWER_FILE = "ogladajacy.json";

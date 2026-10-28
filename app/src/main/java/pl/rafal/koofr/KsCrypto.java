@@ -21,18 +21,21 @@ import javax.crypto.spec.SecretKeySpec;
 public final class KsCrypto {
     private static final byte[] MAGIC = {0x4B, 0x53, 0x59, 0x31};
     private static final byte[] SALT = "koofr_sync v1".getBytes(StandardCharsets.UTF_8);
-    static final int KIND_BACKUP = 1, KIND_SHARE = 2;
+    static final int KIND_BACKUP = 1, KIND_SHARE = 2, KIND_EXCHANGE = 3;
     private static final SecureRandom RND = new SecureRandom();
 
     public final String appId;
     final byte[] backupKey;
+    /** Klucz wymiany między aplikacjami tej samej osoby (wspólny dla wszystkich aplikacji). */
+    final byte[] exchangeKey;
     private final byte[] priv;
     public final byte[] publicKey;
     public final String codeCheck;
 
-    private KsCrypto(String appId, byte[] backupKey, byte[] priv, byte[] pub, String check) {
+    private KsCrypto(String appId, byte[] backupKey, byte[] exchangeKey, byte[] priv, byte[] pub, String check) {
         this.appId = appId;
         this.backupKey = backupKey;
+        this.exchangeKey = exchangeKey;
         this.priv = priv;
         this.publicKey = pub;
         this.codeCheck = check;
@@ -42,7 +45,8 @@ public final class KsCrypto {
         byte[] master = hkdf(code.entropy, "master".getBytes(StandardCharsets.UTF_8));
         byte[] backup = hkdf(master, ("backup/" + appId).getBytes(StandardCharsets.UTF_8));
         byte[] seed = hkdf(master, ("x25519/" + appId).getBytes(StandardCharsets.UTF_8));
-        return new KsCrypto(appId, backup, seed, X25519.publicKey(seed), checkOf(code));
+        byte[] exchange = hkdf(master, "exchange".getBytes(StandardCharsets.UTF_8));
+        return new KsCrypto(appId, backup, exchange, seed, X25519.publicKey(seed), checkOf(code));
     }
 
     public static String checkOf(RecoveryCode code) {
@@ -90,6 +94,29 @@ public final class KsCrypto {
     /** Nazwa załącznika: HMAC-SHA256(klucz kopii, treść), pierwsze 16 bajtów hex. */
     public String blobId(byte[] data) {
         return hex(Arrays.copyOf(hmac(backupKey, data), 16));
+    }
+
+    // ------------------------------------------------------------ wymiana między aplikacjami
+
+    private static final byte[] EXCHANGE_AAD = "wymiana".getBytes(StandardCharsets.UTF_8);
+
+    public byte[] sealExchange(byte[] data) throws KsException {
+        byte[] header = header(KIND_EXCHANGE);
+        byte[] nonce = new byte[12];
+        RND.nextBytes(nonce);
+        return concat(header, nonce, gcm(Cipher.ENCRYPT_MODE, exchangeKey, nonce, concat(header, EXCHANGE_AAD), gzip(data)));
+    }
+
+    public byte[] openExchange(byte[] file) throws KsException {
+        checkHeader(file, KIND_EXCHANGE);
+        if (file.length < 5 + 12 + 16) throw new KsException("Plik wymiany jest uszkodzony.");
+        byte[] header = Arrays.copyOf(file, 5);
+        try {
+            return gunzip(gcm(Cipher.DECRYPT_MODE, exchangeKey, Arrays.copyOfRange(file, 5, 17), concat(header, EXCHANGE_AAD),
+                    Arrays.copyOfRange(file, 17, file.length)));
+        } catch (KsException e) {
+            throw new KsException("Nie da się odczytać danych wymiany — inny kod odzyskiwania w tej aplikacji.");
+        }
     }
 
     // ------------------------------------------------------------ podgląd
