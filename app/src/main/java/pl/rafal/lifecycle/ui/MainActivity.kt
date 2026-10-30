@@ -218,9 +218,10 @@ fun AppRoot(startTab: String?) {
                 sub == "categories" -> CategoriesScreen(onBack = { sub = null })
                 sub == "permissions" -> PermissionsScreen(onBack = { sub = null })
                 sub == "goals" -> GoalsScreen(onBack = { sub = null })
+                sub == "work" -> WorkScreen(onBack = { sub = null })
                 sub == "koofr" -> pl.rafal.koofr.KoofrScreen(onBack = { sub = null })
                 sub?.startsWith("summary") == true -> SummaryScreen(sub) { sub = null }
-                tab == Tab.DAY -> DayScreen { tab = Tab.HEALTH }
+                tab == Tab.DAY -> DayScreen(healthNav = { tab = Tab.HEALTH }, onOpen = { sub = it })
                 tab == Tab.STATS -> StatsScreen(onSummary = { sub = it }, onHealth = { tab = Tab.HEALTH })
                 tab == Tab.PLACES -> PlacesScreen()
                 tab == Tab.HEALTH -> HealthScreen()

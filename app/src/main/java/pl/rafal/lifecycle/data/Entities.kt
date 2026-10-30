@@ -21,6 +21,12 @@ object Kind {
     const val SCHOOL = "SCHOOL"
     /** Krótki postój w trasie w godzinach pracy w terenie (sklep, stacja) — nie wizyta. */
     const val STOP = "STOP"
+    /** Pociąg, metro, SKM — przejazd po torach. */
+    const val TRAIN = "TRAIN"
+    /** Autobus, tramwaj. */
+    const val TRANSIT = "TRANSIT"
+    /** Hulajnoga elektryczna. */
+    const val SCOOTER = "SCOOTER"
     const val UNKNOWN = "UNKNOWN"
     const val CUSTOM = "CUSTOM"
 
@@ -125,6 +131,9 @@ object DefaultCategories {
         c("Wizyta u klienta", 0xFF0A84FF, "handshake", Kind.FIELD, 14),
         Category(name = "Szkoła / przedszkole", color = 0xFFFFB300.toInt(), icon = "emoji:🎒", kind = Kind.SCHOOL, sortOrder = 15),
         c("Postój w trasie", 0xFF8E9AAF, "local_parking", Kind.STOP, 16),
+        c("Pociąg", 0xFF3A7BD5, "train", Kind.TRAIN, 17),
+        c("Komunikacja miejska", 0xFF00A3A3, "tram", Kind.TRANSIT, 18),
+        c("Hulajnoga", 0xFF00C2A8, "electric_scooter", Kind.SCOOTER, 19),
         c("Nieznane", 0xFFA0A0A8, "unknown", Kind.UNKNOWN, 99),
     )
 }
@@ -227,3 +236,29 @@ data class ScreenDay(
 
     fun hourList(): List<Long> = hours.split(",").map { it.toLongOrNull() ?: 0L }.let { if (it.size == 24) it else List(24) { 0L } }
 }
+
+/** Nastrój dnia (1 = 😞 … 5 = 😄) z opcjonalną notatką. [day] = dzień epoki. */
+@Entity(tableName = "mood_days")
+data class MoodDay(
+    @PrimaryKey val day: Long,
+    val value: Int,
+    val note: String? = null,
+    val at: Long = System.currentTimeMillis(),
+)
+
+/** Pogoda dnia z Open-Meteo dla miejsca, w którym spędzono najwięcej czasu. */
+@Entity(tableName = "weather_days")
+data class WeatherDay(
+    @PrimaryKey val day: Long,
+    val tMax: Double,
+    val tMin: Double,
+    /** Suma opadów w mm. */
+    val precip: Double,
+    /** Kod pogody WMO (0 = bezchmurnie, 61 = deszcz…). */
+    val code: Int,
+    /** Usłonecznienie w godzinach. */
+    val sunH: Double,
+    val lat: Double,
+    val lng: Double,
+    val updatedAt: Long,
+)

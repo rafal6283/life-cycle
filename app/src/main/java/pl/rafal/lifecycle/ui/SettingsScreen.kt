@@ -225,6 +225,11 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
             }
         }
 
+        SectionTitle("Praca")
+        Group {
+            NavRow("Ewidencja czasu pracy", "Godziny, przerwy, nadgodziny, klienci · PDF i CSV") { onOpen("work") }
+        }
+
         SectionTitle("Praca w terenie")
         var fieldReport by remember { mutableStateOf(false) }
         FieldWorkSettings(onReport = { fieldReport = true })
@@ -277,6 +282,26 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
             }
             HorizontalDivider(Modifier.padding(start = 16.dp))
             NavRow("Usuń zawyżone kroki z telefonu", "Starsze wersje Doby mogły dopisywać za dużo kroków") { stepFixDialog = true }
+        }
+
+        SectionTitle("Nastrój i pogoda")
+        Group {
+            var moodOn by remember { mutableStateOf(prefs.moodOn) }
+            var moodRem by remember { mutableStateOf(prefs.moodReminder) }
+            var weatherOn by remember { mutableStateOf(prefs.weather) }
+            SwitchRow("Ocena nastroju", "Jedno dotknięcie dziennie; Trendy pokażą, co poprawia nastrój", moodOn) {
+                moodOn = it; prefs.moodOn = it
+            }
+            if (moodOn) {
+                HorizontalDivider(Modifier.padding(start = 16.dp))
+                SwitchRow("Przypomnienie wieczorem", "Około ${prefs.moodAt / 60}:${"%02d".format(prefs.moodAt % 60)}, jeśli dzień nie jest oceniony", moodRem) {
+                    moodRem = it; prefs.moodReminder = it
+                }
+            }
+            HorizontalDivider(Modifier.padding(start = 16.dp))
+            SwitchRow("Pogoda w historii", "Open-Meteo (bezpłatnie): temperatura, opady i słońce dla każdego dnia", weatherOn) {
+                weatherOn = it; prefs.weather = it
+            }
         }
 
         SectionTitle("Cele i podsumowania")

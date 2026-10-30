@@ -406,6 +406,11 @@ object Backup {
                     .put("n", d.notifs).put("f", d.firstUse ?: JSONObject.NULL).put("a", d.apps).put("h", d.hours).put("t", d.updatedAt).put("s", d.sessions))
             }
         })
+        root.put("mood", JSONArray().apply {
+            db.mood().all().forEach { m ->
+                put(JSONObject().put("d", m.day).put("v", m.value).put("n", m.note ?: JSONObject.NULL).put("t", m.at))
+            }
+        })
         root.put("goals", JSONArray().apply {
             db.goals().getAll().forEach { g ->
                 put(JSONObject().put("id", g.id).put("categoryId", g.categoryId).put("type", g.type)
@@ -473,6 +478,12 @@ object Backup {
                             x.optLongOrNull("f"), x.getString("a"), x.getString("h"), x.optLong("t"), x.optString("s", ""),
                         )
                     )
+                }
+            }
+            root.optJSONArray("mood")?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    val x = arr.getJSONObject(i)
+                    db.mood().upsert(pl.rafal.lifecycle.data.MoodDay(x.getLong("d"), x.getInt("v"), x.optStringOrNull("n"), x.optLong("t")))
                 }
             }
             val ext = root.optJSONArray("ext")

@@ -183,6 +183,71 @@ class Prefs(ctx: Context) {
     fun goalNotified(key: String): Boolean = p.getBoolean("gn_$key", false)
     fun setGoalNotified(key: String) = p.edit().putBoolean("gn_$key", true).apply()
 
+    // --- Ewidencja czasu pracy
+    /** Norma dzienna w minutach. */
+    var workNormMin: Int
+        get() = p.getInt("workNormMin", 8 * 60)
+        set(v) = p.edit().putInt("workNormMin", v).apply()
+
+    /** Dni pracujące 1 (pon) … 7 (nd). */
+    var workDays: Set<Int>
+        get() = p.getStringSet("workDays", setOf("1", "2", "3", "4", "5"))!!.mapNotNull { it.toIntOrNull() }.toSet()
+        set(v) = p.edit().putStringSet("workDays", v.map { it.toString() }.toSet()).apply()
+
+    /** Przejazdy między miejscami pracy (np. wizytami u klientów) liczą się do czasu pracy. */
+    var workCountTravel: Boolean
+        get() = p.getBoolean("workCountTravel", true)
+        set(v) = p.edit().putBoolean("workCountTravel", v).apply()
+
+    // --- Nastrój
+    var moodOn: Boolean
+        get() = p.getBoolean("moodOn", true)
+        set(v) = p.edit().putBoolean("moodOn", v).apply()
+
+    var moodReminder: Boolean
+        get() = p.getBoolean("moodReminder", true)
+        set(v) = p.edit().putBoolean("moodReminder", v).apply()
+
+    /** Godzina przypomnienia o nastroju (minuty od północy). */
+    var moodAt: Int
+        get() = p.getInt("moodAt", 21 * 60)
+        set(v) = p.edit().putInt("moodAt", v).apply()
+
+    var moodNotified: Long
+        get() = p.getLong("moodNotified", -1L)
+        set(v) = p.edit().putLong("moodNotified", v).apply()
+
+    // --- Pogoda, kalendarz, posiłki, transport, wyjazdy
+    var weather: Boolean
+        get() = p.getBoolean("weather", true)
+        set(v) = p.edit().putBoolean("weather", v).apply()
+
+    var calendarHints: Boolean
+        get() = p.getBoolean("calendarHints", false)
+        set(v) = p.edit().putBoolean("calendarHints", v).apply()
+
+    var mealsHc: Boolean
+        get() = p.getBoolean("mealsHc", true)
+        set(v) = p.edit().putBoolean("mealsHc", v).apply()
+
+    /** Ile minut trwa posiłek, gdy aplikacja zapisała tylko chwilę jedzenia. */
+    var mealMinutes: Int
+        get() = p.getInt("mealMinutes", 20)
+        set(v) = p.edit().putInt("mealMinutes", v).apply()
+
+    var transitDetect: Boolean
+        get() = p.getBoolean("transitDetect", true)
+        set(v) = p.edit().putBoolean("transitDetect", v).apply()
+
+    var scooter: Boolean
+        get() = p.getBoolean("scooter", false)
+        set(v) = p.edit().putBoolean("scooter", v).apply()
+
+    /** Wyjazd: co najmniej tyle km od domu. */
+    var tripKm: Int
+        get() = p.getInt("tripKm", 40)
+        set(v) = p.edit().putInt("tripKm", v).apply()
+
     var onboardingDone: Boolean
         get() = p.getBoolean("onboardingDone", false)
         set(v) = p.edit().putBoolean("onboardingDone", v).apply()

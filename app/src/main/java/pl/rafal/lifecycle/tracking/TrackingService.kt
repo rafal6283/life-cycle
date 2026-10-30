@@ -305,6 +305,7 @@ class WatchdogWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
         safe("Czas przed ekranem") { ScreenTime.sync(ctx) }
         safe("Sprawdzanie celów") { GoalChecker.run(ctx) }
         safe("Podsumowanie tygodnia") { pl.rafal.lifecycle.domain.Summaries.maybeNotify(ctx) }
+        safe("Przypomnienie o nastroju") { MoodReminder.run(ctx) }
         safe("Kopia zapasowa") { Backup.autoBackup(ctx) }
         safe("Widżet") { DobaWidget.updateAll(ctx) }
         val db = (applicationContext as LifeApp).db
@@ -320,6 +321,23 @@ class WatchdogWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
             WorkManager.getInstance(ctx)
                 .enqueueUniquePeriodicWork("watchdog", ExistingPeriodicWorkPolicy.KEEP, req)
         }
+    }
+}
+
+/** Wieczorne przypomnienie o ocenie dnia (raz dziennie, tylko gdy dzień nie jest oceniony). */
+object MoodReminder {
+    suspend fun run(ctx: Context) {
+        val p = pl.rafal.lifecycle.util.Prefs(ctx)
+        if (!p.moodOn || !p.moodReminder) return
+        val now = java.time.LocalDateTime.now()
+        val today = now.toLocalDate().toEpochDay()
+        if (p.moodNotified == today) return
+        val min = now.hour * 60 + now.minute
+        if (min < p.moodAt || min > 23 * 60 + 30) return
+        val db = (ctx.applicationContext as LifeApp).db
+        if (db.mood().get(today) != null) return
+        p.moodNotified = today
+        Notifications.simple(ctx, 7100, Notifications.CH_GOALS, "Jak minął dzień?", "Oceń go jednym dotknięciem 😞 🙁 😐 🙂 😄", "day")
     }
 }
 

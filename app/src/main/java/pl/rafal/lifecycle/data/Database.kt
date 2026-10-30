@@ -292,10 +292,43 @@ interface ScreenOffDao {
     suspend fun prune(before: Long)
 }
 
+@Dao
+interface MoodDao {
+    @Query("SELECT * FROM mood_days WHERE day >= :from AND day < :to ORDER BY day")
+    fun observe(from: Long, to: Long): Flow<List<MoodDay>>
+
+    @Query("SELECT * FROM mood_days WHERE day >= :from AND day < :to ORDER BY day")
+    suspend fun range(from: Long, to: Long): List<MoodDay>
+
+    @Query("SELECT * FROM mood_days WHERE day = :day")
+    suspend fun get(day: Long): MoodDay?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(d: MoodDay)
+
+    @Query("DELETE FROM mood_days WHERE day = :day")
+    suspend fun delete(day: Long)
+
+    @Query("SELECT * FROM mood_days ORDER BY day")
+    suspend fun all(): List<MoodDay>
+}
+
+@Dao
+interface WeatherDao {
+    @Query("SELECT * FROM weather_days WHERE day >= :from AND day < :to ORDER BY day")
+    fun observe(from: Long, to: Long): Flow<List<WeatherDay>>
+
+    @Query("SELECT * FROM weather_days WHERE day >= :from AND day < :to ORDER BY day")
+    suspend fun range(from: Long, to: Long): List<WeatherDay>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(list: List<WeatherDay>)
+}
+
 @Database(
     entities = [Category::class, Place::class, Entry::class, LocationSample::class, ScreenOff::class, Goal::class, StepBucket::class,
-        HealthSample::class, ExtEvent::class, ScreenDay::class],
-    version = 6,
+        HealthSample::class, ExtEvent::class, ScreenDay::class, MoodDay::class, WeatherDay::class],
+    version = 7,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -309,6 +342,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun health(): HealthDao
     abstract fun ext(): ExtDao
     abstract fun screen(): ScreenDao
+    abstract fun mood(): MoodDao
+    abstract fun weather(): WeatherDao
 
     companion object {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -365,9 +400,23 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `mood_days` (`day` INTEGER NOT NULL, `value` INTEGER NOT NULL, " +
+                        "`note` TEXT, `at` INTEGER NOT NULL, PRIMARY KEY(`day`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `weather_days` (`day` INTEGER NOT NULL, `tMax` REAL NOT NULL, " +
+                        "`tMin` REAL NOT NULL, `precip` REAL NOT NULL, `code` INTEGER NOT NULL, `sunH` REAL NOT NULL, " +
+                        "`lat` REAL NOT NULL, `lng` REAL NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`day`))"
+                )
+            }
+        }
+
         fun build(ctx: Context): AppDatabase =
             Room.databaseBuilder(ctx, AppDatabase::class.java, "lifecycle.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .build()
     }
 }

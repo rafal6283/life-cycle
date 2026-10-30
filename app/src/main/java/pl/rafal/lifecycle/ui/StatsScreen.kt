@@ -310,6 +310,10 @@ fun StatsScreen(onSummary: (String) -> Unit = {}, onHealth: () -> Unit = {}) {
                         val sleepColor = catColor(categories.firstOrNull { it.kind == pl.rafal.lifecycle.data.Kind.SLEEP })
                         item { SectionTitle("Pory snu") }
                         item { TrendCard { SleepTimesChart(td.second, sleepColor, "$type-$startDay") } }
+                        pl.rafal.lifecycle.domain.SleepRhythm.compute(td.second)?.let { r ->
+                            item { SectionTitle("Regularność snu") }
+                            item { SleepRegularityCard(r) }
+                        }
                     }
                     if (td.third.isNotEmpty()) {
                         item { SectionTitle("Rekordy okresu") }
@@ -336,6 +340,7 @@ fun StatsScreen(onSummary: (String) -> Unit = {}, onHealth: () -> Unit = {}) {
         }
 
         item(key = "screen-$type-$startDay") { ScreenTrendSection(period) }
+        item(key = "mood-$type-$startDay") { MoodTrendSection(period) }
 
         if (healthTrends.isNotEmpty()) {
             item { SectionTitle("Zdrowie · " + if (type == PeriodType.YEAR) "średnio w miesiącach" else "średnio vs poprzedni okres") }
