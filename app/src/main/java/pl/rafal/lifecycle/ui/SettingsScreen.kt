@@ -304,6 +304,40 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
             }
         }
 
+        SectionTitle("Miejsca i wyjazdy")
+        Group {
+            var calOn by remember { mutableStateOf(pl.rafal.lifecycle.domain.CalendarHints.enabled(ctx)) }
+            val calPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+                calOn = ok; prefs.calendarHints = ok
+            }
+            SwitchRow(
+                "Nazwy z kalendarza",
+                "Gdy o tej porze masz wydarzenie (np. „Dentysta”), Doba podpowie je przy nazywaniu miejsca", calOn,
+            ) {
+                if (it && !pl.rafal.lifecycle.domain.CalendarHints.allowed(ctx)) {
+                    calPerm.launch(android.Manifest.permission.READ_CALENDAR)
+                } else {
+                    calOn = it; prefs.calendarHints = it
+                }
+            }
+            HorizontalDivider(Modifier.padding(start = 16.dp))
+            var tripKm by remember { mutableStateOf(prefs.tripKm) }
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                Text("Wyjazd od", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "Ponad doba dalej niż tyle od domu to wyjazd (Miejsca → walizka)",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(20, 40, 80, 150).forEach { k ->
+                        androidx.compose.material3.FilterChip(
+                            selected = tripKm == k, onClick = { tripKm = k; prefs.tripKm = k }, label = { Text("$k km") },
+                        )
+                    }
+                }
+            }
+        }
+
         SectionTitle("Cele i podsumowania")
         Group {
             NavRow("Cele", "Minimum, limity i „ile razy w tygodniu”") { onOpen("goals") }

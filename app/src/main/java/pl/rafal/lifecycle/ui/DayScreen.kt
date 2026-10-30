@@ -268,6 +268,7 @@ fun DayScreen(healthNav: () -> Unit = {}, onOpen: (String) -> Unit = {}) {
                 }
             }
 
+            item { WeatherLine(day) }
             item {
                 Spacer(Modifier.height(10.dp))
                 StepsCard(stepsTotal, stepHours, stepGoal) { editStepGoal = true }

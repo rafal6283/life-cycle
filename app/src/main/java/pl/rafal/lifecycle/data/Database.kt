@@ -237,6 +237,12 @@ interface EntryDao {
     @Query("SELECT * FROM entries WHERE id = :id")
     suspend fun byId(id: Long): Entry?
 
+    @Query("SELECT MIN(startAt) FROM entries")
+    suspend fun firstStart(): Long?
+
+    @Query("SELECT * FROM entries WHERE lat IS NOT NULL AND source = 'AUTO_STAY' ORDER BY startAt")
+    suspend fun allStays(): List<Entry>
+
     @Query("SELECT * FROM entries WHERE source = 'AUTO_STAY' AND placeId IS NULL AND categoryId = :fieldCat AND startAt >= :since ORDER BY startAt")
     suspend fun fieldStaysSince(fieldCat: Long, since: Long): List<Entry>
 

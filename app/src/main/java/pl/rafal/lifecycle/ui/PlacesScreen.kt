@@ -21,6 +21,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Luggage
+import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.LaunchedEffect
 import pl.rafal.lifecycle.domain.FieldWork
@@ -92,7 +94,7 @@ private fun placeKey(p: Place) = "p:${p.id}"
 private val SelectColor = 0xFFFF9F0A.toInt()
 
 @Composable
-fun PlacesScreen() {
+fun PlacesScreen(onOpen: (String) -> Unit = {}) {
     val ctx = LocalContext.current
     val repo = LifeApp.instance.repo
     val categories by repo.categories.collectAsState(initial = emptyList())
@@ -114,16 +116,26 @@ fun PlacesScreen() {
     fun clusterIndex(i: Int) = 1 + i
     fun placeIndex(j: Int) = (if (clusters.isNotEmpty()) clusters.size + 2 else 1) + j
 
+    fun staysOf(c: Cluster) = unknown.filter { e ->
+        val lat = e.lat ?: return@filter false
+        val lng = e.lng ?: return@filter false
+        pl.rafal.lifecycle.util.Geo.distance(lat, lng, c.lat, c.lng) < 150
+    }
+
     suspend fun nameDraft(c: Cluster): PlaceDraft {
+        val hint = pl.rafal.lifecycle.domain.CalendarHints.bestFor(ctx, staysOf(c))
         val addr = FieldWork.address(ctx, c.lat, c.lng)
-        return PlaceDraft(null, c.lat, c.lng, addr?.substringBefore(','))
+        return PlaceDraft(null, c.lat, c.lng, hint?.title ?: addr?.substringBefore(','))
     }
 
     val selCluster = clusters.indexOfFirst { clusterKey(it) == selected }
     val selPlace = places.firstOrNull { placeKey(it) == selected }
 
     Column(Modifier.fillMaxSize()) {
-        ScreenHeader("Miejsca")
+        ScreenHeader("Miejsca") {
+            IconButton(onClick = { onOpen("trips") }) { Icon(Icons.Filled.Luggage, "Wyjazdy") }
+            IconButton(onClick = { onOpen("heatmap") }) { Icon(Icons.Filled.Whatshot, "Gdzie bywasz") }
+        }
         PlacesMap(
             places = places, clusters = clusters, catMap = catMap, center = center,
             selected = selected, focus = focus,
@@ -163,7 +175,7 @@ fun PlacesScreen() {
                 item(key = "h-unknown") { SectionTitle("Nieznane miejsca · nazwij je") }
                 itemsIndexed(clusters, key = { _, c -> clusterKey(c) }) { i, c ->
                     UnknownRow(
-                        c, i + 1, selected == clusterKey(c),
+                        c, i + 1, selected == clusterKey(c), staysOf(c),
                         onClick = { selected = clusterKey(c); show(c.lat, c.lng) },
                         onName = { scope.launch { editing = nameDraft(c) } },
                     )
@@ -203,9 +215,12 @@ private fun NumberBadge(n: Int, color: Color, size: androidx.compose.ui.unit.Dp 
 }
 
 @Composable
-private fun UnknownRow(c: Cluster, number: Int, selected: Boolean, onClick: () -> Unit, onName: () -> Unit) {
+private fun UnknownRow(c: Cluster, number: Int, selected: Boolean, stays: List<pl.rafal.lifecycle.data.Entry>, onClick: () -> Unit, onName: () -> Unit) {
     val ctx = LocalContext.current
     val address by produceState<String?>(null, c.lat, c.lng) { value = FieldWork.address(ctx, c.lat, c.lng) }
+    val hint by produceState<pl.rafal.lifecycle.domain.CalendarHint?>(null, c.lat, c.lng, stays.size) {
+        value = pl.rafal.lifecycle.domain.CalendarHints.bestFor(ctx, stays)
+    }
     Row(
         Modifier.fillMaxWidth()
             .background(if (selected) Color(SelectColor).copy(alpha = 0.14f) else Color.Transparent)
@@ -224,6 +239,13 @@ private fun UnknownRow(c: Cluster, number: Int, selected: Boolean, onClick: () -
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            hint?.let {
+                Text(
+                    "📅 ${it.title}" + (it.location?.let { l -> " · $l" } ?: ""),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         FilledTonalButton(onClick = onName) { Text("Nazwij") }
     }

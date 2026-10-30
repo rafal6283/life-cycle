@@ -219,11 +219,14 @@ fun AppRoot(startTab: String?) {
                 sub == "permissions" -> PermissionsScreen(onBack = { sub = null })
                 sub == "goals" -> GoalsScreen(onBack = { sub = null })
                 sub == "work" -> WorkScreen(onBack = { sub = null })
+                sub == "trips" -> TripsScreen(onBack = { sub = null }, onOpen = { sub = it })
+                sub?.startsWith("trip:") == true -> TripDetailScreen(sub!!.removePrefix("trip:").toLong()) { sub = "trips" }
+                sub == "heatmap" -> HeatMapScreen(onBack = { sub = null })
                 sub == "koofr" -> pl.rafal.koofr.KoofrScreen(onBack = { sub = null })
                 sub?.startsWith("summary") == true -> SummaryScreen(sub) { sub = null }
                 tab == Tab.DAY -> DayScreen(healthNav = { tab = Tab.HEALTH }, onOpen = { sub = it })
                 tab == Tab.STATS -> StatsScreen(onSummary = { sub = it }, onHealth = { tab = Tab.HEALTH })
-                tab == Tab.PLACES -> PlacesScreen()
+                tab == Tab.PLACES -> PlacesScreen(onOpen = { sub = it })
                 tab == Tab.HEALTH -> HealthScreen()
                 else -> SettingsScreen(onOpen = { sub = it })
             }
