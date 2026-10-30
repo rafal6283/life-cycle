@@ -164,6 +164,9 @@ fun StatsScreen(onSummary: (String) -> Unit = {}, onHealth: () -> Unit = {}) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { ScreenHeader("Trendy") }
         item { SummaryShortcut(period) { onSummary("summary:${type.name}:$startDay") } }
+        if (type == PeriodType.YEAR) {
+            item { YearRecapBanner(period.start.year) { onSummary("year:${period.start.year}") } }
+        }
         item {
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
                 PeriodType.entries.forEachIndexed { i, t ->

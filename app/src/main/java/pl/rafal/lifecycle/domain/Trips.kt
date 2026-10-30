@@ -138,6 +138,10 @@ object Visited {
         app.db.locations().range(maxOf(from, now - 90 * 86_400_000L), now).forEachIndexed { i, l ->
             if (i % 3 == 0) pts += Point(l.lat, l.lng, 0.05)
         }
+        // Siatka ~100 m — mniej punktów do rysowania.
+        val grid = pts.groupBy { (Math.round(it.lat * 1000) to Math.round(it.lng * 1000)) }
+            .map { (k, l) -> Point(k.first / 1000.0, k.second / 1000.0, l.sumOf { it.weight }) }
+        pts.clear(); pts.addAll(grid)
         // Miejscowości: siatka ~1 km, nazwy z Geocodera.
         class Cell(val lat: Double, val lng: Double) { var ms = 0L; var first = Long.MAX_VALUE; var n = 0 }
         val cells = LinkedHashMap<String, Cell>()

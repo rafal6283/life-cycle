@@ -222,6 +222,7 @@ fun AppRoot(startTab: String?) {
                 sub == "trips" -> TripsScreen(onBack = { sub = null }, onOpen = { sub = it })
                 sub?.startsWith("trip:") == true -> TripDetailScreen(sub!!.removePrefix("trip:").toLong()) { sub = "trips" }
                 sub == "heatmap" -> HeatMapScreen(onBack = { sub = null })
+                sub?.startsWith("year:") == true -> YearRecapScreen(sub!!.removePrefix("year:").toInt()) { sub = null }
                 sub == "koofr" -> pl.rafal.koofr.KoofrScreen(onBack = { sub = null })
                 sub?.startsWith("summary") == true -> SummaryScreen(sub) { sub = null }
                 tab == Tab.DAY -> DayScreen(healthNav = { tab = Tab.HEALTH }, onOpen = { sub = it })
