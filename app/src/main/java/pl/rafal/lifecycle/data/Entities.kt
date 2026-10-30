@@ -40,6 +40,8 @@ object Source {
     const val SLEEP_HC = "SLEEP_HC"
     const val SLEEP_AUTO = "SLEEP_AUTO"
     const val WORKOUT_HC = "WORKOUT_HC"
+    /** Posiłek z Health Connect (np. Dziennik talerza). */
+    const val MEAL_HC = "MEAL_HC"
     const val MANUAL = "MANUAL"
     /** „Teraz robię…” — trwa, dopóki użytkownik go nie zakończy albo nie zmieni miejsca. */
     const val OVERRIDE = "OVERRIDE"
@@ -48,6 +50,7 @@ object Source {
         SLEEP_HC -> "Health Connect"
         SLEEP_AUTO -> "sen wykryty automatycznie"
         WORKOUT_HC -> "trening z Health Connect"
+        MEAL_HC -> "posiłek z Health Connect"
         MANUAL -> "ręcznie"
         OVERRIDE -> "przełączone ręcznie"
         else -> null

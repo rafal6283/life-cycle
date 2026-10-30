@@ -304,6 +304,30 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
             }
         }
 
+        SectionTitle("Jedzenie i transport")
+        Group {
+            var meals by remember { mutableStateOf(prefs.mealsHc) }
+            var transit by remember { mutableStateOf(prefs.transitDetect) }
+            var scooter by remember { mutableStateOf(prefs.scooter) }
+            SwitchRow(
+                "Posiłki z Health Connect",
+                "Z Dziennika talerza i innych aplikacji — jako „Jedzenie” na pierścieniu (wymaga zgody w Zdrowiu)", meals,
+            ) {
+                meals = it; prefs.mealsHc = it
+                scope.launch { withContext(Dispatchers.IO) { try { pl.rafal.lifecycle.tracking.MealImporter.run(ctx) } catch (_: Exception) {} } }
+            }
+            HorizontalDivider(Modifier.padding(start = 16.dp))
+            SwitchRow(
+                "Pociąg, tramwaj, autobus",
+                "Przejazdy po torach i z postojami na przystankach rozpoznawane z mapy OpenStreetMap", transit,
+            ) { transit = it; prefs.transitDetect = it }
+            HorizontalDivider(Modifier.padding(start = 16.dp))
+            SwitchRow(
+                "Mam hulajnogę elektryczną",
+                "Spokojna jazda 12–30 km/h bez pedałowania zapisze się jako „Hulajnoga”", scooter,
+            ) { scooter = it; prefs.scooter = it }
+        }
+
         SectionTitle("Miejsca i wyjazdy")
         Group {
             var calOn by remember { mutableStateOf(pl.rafal.lifecycle.domain.CalendarHints.enabled(ctx)) }

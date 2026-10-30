@@ -73,8 +73,8 @@ object Trips {
         val trips = mutableListOf<Trip>()
         var i = 0
         while (i < stays.size) {
-            val d = homeDist(stays[i]) ?: run { i++; continue }
-            if (d < km) { i++; continue }
+            val d = homeDist(stays[i])
+            if (d == null || d < km) { i++; continue }
             // Początek: koniec ostatniego pobytu blisko domu.
             val before = (i - 1 downTo 0).firstOrNull { (homeDist(stays[it]) ?: Double.MAX_VALUE) < km }
             val startAt = before?.let { stays[it].endAt } ?: stays[i].startAt

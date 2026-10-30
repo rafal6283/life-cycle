@@ -67,7 +67,7 @@ object HealthSync {
         Metric.WATER to HydrationRecord::class,
     )
 
-    val PERMISSIONS: Set<String> = recordTypes.values.map { HealthPermission.getReadPermission(it) }.toSet() + HISTORY
+    val PERMISSIONS: Set<String> = recordTypes.values.map { HealthPermission.getReadPermission(it) }.toSet() + HISTORY + MealImporter.PERMISSION
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("health_sync", Context.MODE_PRIVATE)
 
