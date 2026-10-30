@@ -434,7 +434,8 @@ private fun ExtCard(
     val title = when (source) {
         ExchangeImport.SRC_NIGHT -> "FF w nocy"
         ExchangeImport.SRC_ECG -> "Epizody AF"
-        else -> "Licznik $label"
+        // zdarzenie z Kreski (np. AFIB) — liczba zdarzeń dziennie
+        else -> if (ext.any { it.source == source && it.label == label && it.type == "session" }) label else "Licznik $label"
     }
     val recent = days.takeLast(7).map { counts[it] ?: 0 }
     Column(
