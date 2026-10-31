@@ -771,6 +771,7 @@ private fun ExtDetailDialog(source: String, label: String, onDismiss: () -> Unit
                 SectionTitle("O której godzinie")
                 TrendCard { HourBars(hours, color) }
             }
+            if (source == ExchangeImport.SRC_ECG) AfContextSection(days)
             Spacer(Modifier.height(24.dp))
         }
     }
