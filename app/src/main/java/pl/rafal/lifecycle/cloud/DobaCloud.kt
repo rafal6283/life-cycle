@@ -78,6 +78,11 @@ object DobaCloud : KoofrApp {
     override val sharing: KoofrSharing = DobaSharing
 
     override val exchange: KoofrExchange = object : KoofrExchange {
+        override val publishes = "Ruch dnia (kroki, trening, praca, podróże) – dla Polar EKG, który szuka, co poprzedza napady AF"
+
+        override suspend fun export(ctx: Context): Map<String, ByteArray?> =
+            mapOf("czynniki-ruch" to pl.rafal.lifecycle.domain.DayFactors.build())
+
         override val sources = listOf(
             "rytm-snu" to "Rytm Snu (FF w nocy)",
             "kreska" to "Kreska (udostępnione liczniki)",
