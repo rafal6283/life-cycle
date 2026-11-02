@@ -40,6 +40,26 @@ object MealImporter {
         else -> null
     }
 
+    /**
+     * Czas jedzenia: zapisany w Health Connect, jeśli dłuższy niż 2 min (aplikacja znała prawdziwy czas);
+     * inaczej obiad 10–20 min zależnie od wielkości, pozostałe posiłki 3–5 min.
+     */
+    fun mealLength(r: NutritionRecord): Long {
+        val recorded = r.endTime.toEpochMilli() - r.startTime.toEpochMilli()
+        if (recorded > 2 * 60_000L) return minOf(recorded, 90 * 60_000L)
+        val kcal = r.energy?.inKilocalories ?: 0.0
+        val min = when {
+            r.mealType == MealType.MEAL_TYPE_LUNCH -> when {
+                kcal in 0.1..500.0 -> 10
+                kcal < 900 || kcal <= 0.0 -> 15
+                else -> 20
+            }
+            kcal in 0.1..150.0 -> 3
+            else -> 5
+        }
+        return min * 60_000L
+    }
+
     suspend fun foodCategory(ctx: Context): Category {
         val app = ctx.applicationContext as LifeApp
         val all = app.db.categories().getAll()
@@ -71,18 +91,20 @@ object MealImporter {
             token = res.pageToken
         } while (token != null && records.size < 5000)
 
-        val minLen = prefs.mealMinutes * 60_000L
+        // Dziennik talerza i inne aplikacje zapisują zwykle tylko chwilę posiłku (1 min) – czas jedzenia szacujemy.
+        fun endOf(r: NutritionRecord) = r.startTime.toEpochMilli() + mealLength(r)
         val groups = mutableListOf<MutableList<NutritionRecord>>()
         for (r in records.sortedBy { it.startTime }) {
             val last = groups.lastOrNull()
-            if (last != null && r.startTime.toEpochMilli() - last.maxOf { it.endTime.toEpochMilli() } < 30 * 60_000L) last += r
+            // kolejne pozycje tego samego posiłku (np. zupa i drugie danie) – do 15 min po końcu poprzedniej
+            if (last != null && r.startTime.toEpochMilli() - last.maxOf { endOf(it) } < 15 * 60_000L) last += r
             else groups += mutableListOf(r)
         }
         val cat = foodCategory(ctx)
         app.db.entries().deleteSourceIn(Source.MEAL_HC, from, now + DAY)
         for (g in groups) {
             val start = g.minOf { it.startTime.toEpochMilli() }
-            val end = maxOf(g.maxOf { it.endTime.toEpochMilli() }, start + minLen)
+            val end = g.maxOf { endOf(it) }
             val kcal = g.sumOf { it.energy?.inKilocalories ?: 0.0 }
             val type = g.map { it.mealType }.firstOrNull { it != MealType.MEAL_TYPE_UNKNOWN } ?: MealType.MEAL_TYPE_UNKNOWN
             val names = g.mapNotNull { it.name?.trim()?.takeIf { n -> n.isNotEmpty() } }.distinct()
