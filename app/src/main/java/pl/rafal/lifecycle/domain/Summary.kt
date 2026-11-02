@@ -269,6 +269,63 @@ object Summaries {
             sections += SumSection("Telefon", "phone_android", 0xFF5856D6, rows)
         }
 
+        // --- Z moich aplikacji (Rytm Snu, Polar EKG, Dziennik talerza, Teczka, Portfel)
+        run {
+            val f = AppFactors.load(ctx)
+            fun daysIn(src: String, a: LocalDate, b: LocalDate) =
+                f[src].orEmpty().filterKeys { !it.isBefore(a) && it.isBefore(b) }.values
+            fun avg(src: String, key: String, a: LocalDate, b: LocalDate): Double? =
+                daysIn(src, a, b).mapNotNull { it[key] }.takeIf { it.isNotEmpty() }?.average()
+            val rows = mutableListOf<SumRow>()
+            avg("rytm-snu", "sleep_min", p.start, p.end)?.let { cur ->
+                val pr = avg("rytm-snu", "sleep_min", prev.start, prev.end)
+                rows += SumRow("Sen (Rytm Snu)", Fmt.durationShort((cur * 60_000).toLong()) + " / noc",
+                    pr?.let { dMs((cur * 60_000).toLong(), (it * 60_000).toLong()) }, pr?.let { cur >= it }, "bed", 0xFF5E5CE6.toInt())
+            }
+            avg("rytm-snu", "score", p.start, p.end)?.let { cur ->
+                val pr = avg("rytm-snu", "score", prev.start, prev.end)
+                rows += SumRow("Ocena snu", "${cur.toInt()}", dNum(cur, pr, 0), pr?.let { cur >= it })
+            }
+            avg("rytm-snu", "apnea_idx", p.start, p.end)?.takeIf { it >= 1 }?.let { cur ->
+                rows += SumRow("Przerwy w oddechu", String.format(Fmt.PL, "%.1f / h", cur), dNum(cur, avg("rytm-snu", "apnea_idx", prev.start, prev.end), 1), null)
+            }
+            // napady AF z Polar EKG (zdarzenia w bazie Doby)
+            val af = ext.filter { it.source == ExchangeImport.SRC_ECG && it.type == "af" }
+            val afCur = af.filter { it.start >= curFrom && it.start < to }
+            val afPrev = af.filter { it.start < curFrom }
+            if (af.isNotEmpty()) {
+                val min = afCur.sumOf { ((it.end ?: it.start) - it.start) / 60_000L }
+                rows += SumRow("Napady AF (Polar EKG)", if (afCur.isEmpty()) "brak" else "${afCur.size} · ${Fmt.durationShort(min * 60_000)}",
+                    if (afPrev.isEmpty() && afCur.isEmpty()) null else "${afPrev.size} tydzień wcześniej".takeIf { p.type == PeriodType.WEEK },
+                    afCur.size <= afPrev.size, "heart", 0xFFFF2D55.toInt())
+            }
+            avg("polar-ekg", "hrv", p.start, p.end)?.let { cur ->
+                val pr = avg("polar-ekg", "hrv", prev.start, prev.end)
+                rows += SumRow("HRV rano", "${cur.toInt()} ms", dNum(cur, pr, 0, " ms"), pr?.let { cur >= it })
+            }
+            val meals = daysIn("dziennik-talerza", p.start, p.end)
+            if (meals.isNotEmpty()) {
+                val kcal = meals.mapNotNull { it["kcal"] }.average()
+                val alc = meals.count { (it["alcohol"] ?: 0.0) > 0 }
+                rows += SumRow("Kalorie (Dziennik talerza)", "${kcal.toInt()} kcal / dzień" + if (alc > 0) " · alkohol $alc ${if (alc == 1) "dzień" else "dni"}" else "",
+                    dNum(kcal, avg("dziennik-talerza", "kcal", prev.start, prev.end), 0, " kcal"), null, "food", 0xFFFF6B22.toInt())
+            }
+            val meds = daysIn("teczka", p.start, p.end)
+            if (meds.isNotEmpty()) {
+                val doses = meds.sumOf { it["doses"] ?: 0.0 }
+                val taken = meds.sumOf { it["taken"] ?: 0.0 }
+                if (doses > 0) rows += SumRow("Leki (Teczka)", "${(taken * 100 / doses).toInt()}% dawek", "pominięte ${(doses - taken).toInt()}".takeIf { doses > taken }, taken >= doses * 0.95)
+            }
+            val pf = f["portfel"].orEmpty()
+            val vNow = pf.filterKeys { it.isBefore(p.end) }.maxByOrNull { it.key }?.value?.get("value")
+            val vBefore = pf.filterKeys { it.isBefore(p.start) }.maxByOrNull { it.key }?.value?.get("value")
+            if (vNow != null && vBefore != null) {
+                val d = vNow - vBefore
+                rows += SumRow("Portfel", String.format(Fmt.PL, "%,.0f zł", vNow), (if (d >= 0) "+" else "−") + String.format(Fmt.PL, "%,.0f zł", kotlin.math.abs(d)), d >= 0)
+            }
+            if (rows.isNotEmpty()) sections += SumSection("Z moich aplikacji", "heart", 0xFFFF2D55, rows)
+        }
+
         // --- Zależności
         val farts = ExchangeImport.dailyCounts(ext, ExchangeImport.SRC_NIGHT, "")
         val insights = if (p.type == PeriodType.WEEK) emptyList() else HealthTrends.correlations(
