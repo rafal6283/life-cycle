@@ -77,6 +77,24 @@ class Repository(val db: AppDatabase) {
         return id
     }
 
+    /** Łączy miejsce [from] z [into]: pobyty przechodzą do [into], [from] znika. */
+    suspend fun mergePlace(from: Place, into: Place) {
+        if (from.id == into.id) return
+        db.entries().movePlace(from.id, into.id, into.categoryId)
+        db.places().delete(from)
+    }
+
+    /** Przypisuje nieznane pobyty z okolicy punktu do miejsca (np. druga część dużego cmentarza). */
+    suspend fun attachUnknownNear(lat: Double, lng: Double, radius: Double, into: Place) {
+        for (e in db.entries().getUnknownStays()) {
+            val la = e.lat ?: continue
+            val ln = e.lng ?: continue
+            if (Geo.distance(la, ln, lat, lng) <= radius) {
+                db.entries().update(e.copy(placeId = into.id, categoryId = into.categoryId))
+            }
+        }
+    }
+
     suspend fun deletePlace(p: Place) {
         val unknown = categoryByKind(Kind.UNKNOWN)
         db.entries().detachPlace(p.id, unknown.id)

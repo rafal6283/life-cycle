@@ -237,6 +237,9 @@ interface EntryDao {
     @Query("SELECT * FROM entries WHERE id = :id")
     suspend fun byId(id: Long): Entry?
 
+    @Query("UPDATE entries SET placeId = :to, categoryId = :cat WHERE placeId = :from")
+    suspend fun movePlace(from: Long, to: Long, cat: Long)
+
     @Query("SELECT MIN(startAt) FROM entries")
     suspend fun firstStart(): Long?
 

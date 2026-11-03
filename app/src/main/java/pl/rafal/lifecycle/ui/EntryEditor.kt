@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -75,6 +76,16 @@ fun EntryEditorDialog(entry: Entry?, defaultDay: LocalDate, onDismiss: () -> Uni
     var placeName by remember { mutableStateOf("") }
     var confirmDelete by remember { mutableStateOf(false) }
     val place = entry?.placeId?.let { id -> places.firstOrNull { it.id == id } }
+    // Ręczna korekta położenia pobytu.
+    var eLat by remember { mutableStateOf(entry?.lat) }
+    var eLng by remember { mutableStateOf(entry?.lng) }
+    var showPin by remember { mutableStateOf(false) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val pois by androidx.compose.runtime.produceState<List<pl.rafal.lifecycle.domain.Poi>?>(null, canSavePlace) {
+        val la = entry?.lat
+        val ln = entry?.lng
+        value = if (canSavePlace && la != null && ln != null) pl.rafal.lifecycle.domain.PoiHints.near(ctx, la, ln) ?: emptyList() else emptyList()
+    }
 
     val endValue = end
     val valid = catId != null && (endValue == null || endValue > start) &&
@@ -132,8 +143,40 @@ fun EntryEditorDialog(entry: Entry?, defaultDay: LocalDate, onDismiss: () -> Uni
                     singleLine = true,
                 )
 
+                val la0 = entry?.lat
+                val ln0 = entry?.lng
+                if (entry != null && la0 != null && ln0 != null && entry.source == Source.AUTO_STAY) {
+                    Spacer(Modifier.height(4.dp))
+                    TextButton(onClick = { showPin = !showPin }) {
+                        Text(if (showPin) "Ukryj mapę" else "Popraw położenie na mapie")
+                    }
+                    if (showPin) {
+                        PinPicker(
+                            eLat ?: la0, eLng ?: ln0, 40.0,
+                            Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(16.dp)),
+                        ) { a, b -> eLat = a; eLng = b }
+                        val moved = pl.rafal.lifecycle.util.Geo.distance(eLat ?: la0, eLng ?: ln0, la0, ln0)
+                        Text(
+                            if (moved >= 3) "Przesunięto o ${moved.toInt()} m" else "Przeciągnij pinezkę albo dotknij mapy.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (place != null) {
+                            Text(
+                                "To zmienia tylko ten pobyt. Środek całego miejsca poprawisz w zakładce Miejsca.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
                 if (canSavePlace) {
                     Spacer(Modifier.height(8.dp))
+                    PoiChips(pois?.filter { it.inside || it.distanceM <= 80 }) { p ->
+                        savePlace = true
+                        placeName = p.label
+                        pl.rafal.lifecycle.domain.PoiHints.suggestCategory(p, categories)?.let { catId = it.id }
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = savePlace, onCheckedChange = { savePlace = it })
                         Text("Zapamiętaj to miejsce")
@@ -184,8 +227,9 @@ fun EntryEditorDialog(entry: Entry?, defaultDay: LocalDate, onDismiss: () -> Uni
                                     startAt = start, endAt = end, categoryId = cid,
                                     note = note.ifBlank { null }, source = newSource,
                                 )
-                                val lat = entry.lat
-                                val lng = entry.lng
+                                val lat = eLat ?: entry.lat
+                                val lng = eLng ?: entry.lng
+                                updated = updated.copy(lat = lat, lng = lng)
                                 if (canSavePlace && savePlace && lat != null && lng != null) {
                                     val pid = repo.savePlace(
                                         Place(name = placeName.trim(), lat = lat, lng = lng, categoryId = cid)

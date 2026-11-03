@@ -83,7 +83,16 @@ import pl.rafal.lifecycle.domain.Cluster
 import pl.rafal.lifecycle.domain.Clusters
 import pl.rafal.lifecycle.util.Fmt
 
-data class PlaceDraft(val place: Place?, val lat: Double, val lng: Double, val suggestedName: String? = null)
+data class PlaceDraft(
+    val place: Place?,
+    val lat: Double,
+    val lng: Double,
+    val suggestedName: String? = null,
+    /** Nieznane miejsca (środki skupisk) zaznaczone od razu do połączenia. */
+    val mergeUnknown: List<Pair<Double, Double>> = emptyList(),
+    val suggestedRadius: Double? = null,
+    val suggestedCat: Long? = null,
+)
 
 /** Polecenie przesunięcia mapy; [n] rośnie, by to samo miejsce dało się pokazać ponownie. */
 data class MapFocus(val point: GeoPoint, val n: Int)
@@ -122,10 +131,34 @@ fun PlacesScreen(onOpen: (String) -> Unit = {}) {
         pl.rafal.lifecycle.util.Geo.distance(lat, lng, c.lat, c.lng) < 150
     }
 
+    // Podpowiedzi z OpenStreetMap dla nieznanych miejsc (po kolei, z pamięcią podręczną).
+    val poiMap by produceState(emptyMap<String, List<pl.rafal.lifecycle.domain.Poi>>(), clusters) {
+        val m = HashMap<String, List<pl.rafal.lifecycle.domain.Poi>>()
+        for (c in clusters.take(30)) {
+            val l = pl.rafal.lifecycle.domain.PoiHints.near(ctx, c.lat, c.lng) ?: continue
+            m[clusterKey(c)] = l
+            value = HashMap(m)
+        }
+    }
+    // Kilka nieznanych miejsc na terenie jednego obiektu (np. cmentarza) — propozycja połączenia.
+    val shared = remember(poiMap, clusters) {
+        clusters.flatMap { c -> poiMap[clusterKey(c)].orEmpty().filter { it.inside }.map { it to c } }
+            .groupBy { it.first.osmId }
+            .filterValues { it.size >= 2 }
+            .map { (_, l) -> l.first().first to l.map { it.second } }
+    }
+
+    fun bestPoi(c: Cluster) = poiMap[clusterKey(c)]?.firstOrNull { it.inside || it.distanceM <= 40 }
+
     suspend fun nameDraft(c: Cluster): PlaceDraft {
         val hint = pl.rafal.lifecycle.domain.CalendarHints.bestFor(ctx, staysOf(c))
+        val poi = bestPoi(c)
         val addr = FieldWork.address(ctx, c.lat, c.lng)
-        return PlaceDraft(null, c.lat, c.lng, hint?.title ?: addr?.substringBefore(','))
+        return PlaceDraft(
+            null, c.lat, c.lng, hint?.title ?: poi?.label ?: addr?.substringBefore(','),
+            suggestedRadius = if (poi?.inside == true) 200.0 else null,
+            suggestedCat = poi?.let { pl.rafal.lifecycle.domain.PoiHints.suggestCategory(it, categories)?.id },
+        )
     }
 
     val selCluster = clusters.indexOfFirst { clusterKey(it) == selected }
@@ -172,10 +205,27 @@ fun PlacesScreen(onOpen: (String) -> Unit = {}) {
         )
         LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
             if (clusters.isNotEmpty()) {
-                item(key = "h-unknown") { SectionTitle("Nieznane miejsca · nazwij je") }
+                item(key = "h-unknown") {
+                    Column {
+                        shared.forEach { (poi, list) ->
+                            MergeBanner(poi.label, list.size) {
+                                val la = list.map { it.lat }.average()
+                                val ln = list.map { it.lng }.average()
+                                val r = list.maxOf { pl.rafal.lifecycle.util.Geo.distance(la, ln, it.lat, it.lng) } + 80
+                                editing = PlaceDraft(
+                                    null, la, ln, poi.label,
+                                    mergeUnknown = list.map { it.lat to it.lng },
+                                    suggestedRadius = r.coerceIn(100.0, 1000.0),
+                                    suggestedCat = pl.rafal.lifecycle.domain.PoiHints.suggestCategory(poi, categories)?.id,
+                                )
+                            }
+                        }
+                        SectionTitle("Nieznane miejsca · nazwij je")
+                    }
+                }
                 itemsIndexed(clusters, key = { _, c -> clusterKey(c) }) { i, c ->
                     UnknownRow(
-                        c, i + 1, selected == clusterKey(c), staysOf(c),
+                        c, i + 1, selected == clusterKey(c), staysOf(c), poiMap[clusterKey(c)],
                         onClick = { selected = clusterKey(c); show(c.lat, c.lng) },
                         onName = { scope.launch { editing = nameDraft(c) } },
                     )
@@ -215,7 +265,25 @@ private fun NumberBadge(n: Int, color: Color, size: androidx.compose.ui.unit.Dp 
 }
 
 @Composable
-private fun UnknownRow(c: Cluster, number: Int, selected: Boolean, stays: List<pl.rafal.lifecycle.data.Entry>, onClick: () -> Unit, onName: () -> Unit) {
+private fun MergeBanner(label: String, count: Int, onClick: () -> Unit) {
+    Row(
+        Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp))
+            .background(Color(SelectColor).copy(alpha = 0.14f)).clickable(onClick = onClick).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("$count nieznane miejsca to jeden teren", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text("„$label” — połącz je w jedno miejsce", style = MaterialTheme.typography.bodySmall)
+        }
+        FilledTonalButton(onClick = onClick) { Text("Połącz") }
+    }
+}
+
+@Composable
+private fun UnknownRow(
+    c: Cluster, number: Int, selected: Boolean, stays: List<pl.rafal.lifecycle.data.Entry>,
+    pois: List<pl.rafal.lifecycle.domain.Poi>?, onClick: () -> Unit, onName: () -> Unit,
+) {
     val ctx = LocalContext.current
     val address by produceState<String?>(null, c.lat, c.lng) { value = FieldWork.address(ctx, c.lat, c.lng) }
     val hint by produceState<pl.rafal.lifecycle.domain.CalendarHint?>(null, c.lat, c.lng, stays.size) {
@@ -242,6 +310,13 @@ private fun UnknownRow(c: Cluster, number: Int, selected: Boolean, stays: List<p
             hint?.let {
                 Text(
                     "📅 ${it.title}" + (it.location?.let { l -> " · $l" } ?: ""),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            pois?.filter { it.inside || it.distanceM <= 60 }?.take(2)?.takeIf { it.isNotEmpty() }?.let { l ->
+                Text(
+                    "📍 " + l.joinToString(" · ") { p -> if (p.name.isBlank()) p.label else "${p.name} (${p.type})" },
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
@@ -407,91 +482,3 @@ fun PlacesMap(
     })
 }
 
-@Composable
-fun PlaceEditorDialog(draft: PlaceDraft, categories: List<Category>, onDismiss: () -> Unit) {
-    val repo = LifeApp.instance.repo
-    val scope = rememberCoroutineScope()
-    val existing = draft.place
-    var name by remember { mutableStateOf(existing?.name ?: draft.suggestedName ?: "") }
-    var catId by remember {
-        mutableStateOf(existing?.categoryId ?: categories.firstOrNull { it.kind == Kind.HOME }?.id)
-    }
-    var radius by remember { mutableFloatStateOf((existing?.radius ?: 100.0).toFloat()) }
-    var confirmDelete by remember { mutableStateOf(false) }
-    val valid = name.isNotBlank() && catId != null
-
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(
-            shape = RoundedCornerShape(26.dp),
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth(0.94f),
-        ) {
-            Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp)) {
-                Text(
-                    if (existing == null) "Nowe miejsce" else "Edytuj miejsce",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = name, onValueChange = { name = it },
-                    label = { Text("Nazwa") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(16.dp))
-                Text("Co tu zwykle robisz?", style = MaterialTheme.typography.labelLarge)
-                Spacer(Modifier.height(8.dp))
-                CategoryPicker(categories.filter { it.kind != Kind.UNKNOWN }, catId) { catId = it }
-                Spacer(Modifier.height(16.dp))
-                Text("Promień: ${radius.toInt()} m", style = MaterialTheme.typography.labelLarge)
-                Slider(value = radius, onValueChange = { radius = it }, valueRange = 50f..500f, steps = 8)
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    if (existing != null) {
-                        TextButton(onClick = { confirmDelete = true }) {
-                            Text("Usuń", color = MaterialTheme.colorScheme.error)
-                        }
-                    }
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = onDismiss) { Text("Anuluj") }
-                    Button(enabled = valid, onClick = {
-                        val cid = catId ?: return@Button
-                        scope.launch {
-                            repo.savePlace(
-                                Place(
-                                    id = existing?.id ?: 0L,
-                                    name = name.trim(),
-                                    lat = draft.lat,
-                                    lng = draft.lng,
-                                    radius = radius.toDouble(),
-                                    categoryId = cid,
-                                    createdAt = existing?.createdAt ?: System.currentTimeMillis(),
-                                )
-                            )
-                            onDismiss()
-                        }
-                    }) { Text("Zapisz") }
-                }
-            }
-        }
-    }
-
-    if (confirmDelete && existing != null) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text("Usunąć miejsce?") },
-            text = { Text("Pobyty w tym miejscu staną się „nieznane”. Historia czasu zostanie zachowana.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        repo.deletePlace(existing)
-                        confirmDelete = false
-                        onDismiss()
-                    }
-                }) { Text("Usuń", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Anuluj") } },
-        )
-    }
-}
