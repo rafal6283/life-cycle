@@ -68,6 +68,13 @@
         </intent>
     </queries>
 
+    <!-- Zgoda użytkownika dla innych aplikacji (np. Znicz) na odczyt pobytów. -->
+    <permission
+        android:name="pl.rafal.lifecycle.permission.READ_STAYS"
+        android:label="Pobyty zapisane w Dobie"
+        android:description="@string/perm_read_stays"
+        android:protectionLevel="dangerous" />
+
     <application
         android:name=".LifeApp"
         android:allowBackup="true"
@@ -121,6 +128,12 @@
             android:name=".tracking.TrackingService"
             android:exported="false"
             android:foregroundServiceType="location" />
+
+        <provider
+            android:name=".data.StaysProvider"
+            android:authorities="pl.rafal.lifecycle.stays"
+            android:exported="true"
+            android:readPermission="pl.rafal.lifecycle.permission.READ_STAYS" />
 
         <receiver
             android:name=".tracking.CarBtReceiver"

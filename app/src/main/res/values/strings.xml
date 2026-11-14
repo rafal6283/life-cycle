@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="perm_read_stays">odczyt miejsc i godzin pobytów zapisanych w Dobie (np. by Znicz dopisał wizyty na cmentarzu)</string>
     <string name="widget_description">Pierścień dzisiejszego dnia i bieżąca aktywność</string>
     <string name="widget_large_description">Dzień: pierścień, kroki, kategorie, zdrowie i szybkie przełączanie</string>
     <string name="widget_week_description">Tydzień: czas w kategoriach dzień po dniu, sen i kroki</string>
