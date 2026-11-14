@@ -56,6 +56,10 @@ data class WorkMonth(
     val days: List<WorkDay>,
     val normMs: Long,
     val clients: List<ClientTotal>,
+    val absences: List<pl.rafal.lifecycle.data.Absence> = emptyList(),
+    val holidays: List<Pair<LocalDate, String>> = emptyList(),
+    /** Pełny wymiar czasu pracy w miesiącu (cały miesiąc, po odjęciu świąt). */
+    val fullNormMs: Long = normMs,
 ) {
     val workedMs: Long get() = days.sumOf { it.workedMs }
     val balanceMs: Long get() = workedMs - normMs
@@ -68,9 +72,24 @@ object WorkTime {
         Kind.TRAIN, Kind.TRANSIT, Kind.SCOOTER,
     )
 
-    fun normFor(ctx: Context, day: LocalDate): Long {
+    /** Norma dnia: 0 w święta i w dni nieobecności (urlop, L4). */
+    fun normFor(ctx: Context, day: LocalDate, absent: Set<Long> = emptySet()): Long {
         val p = Prefs(ctx)
+        if (Holidays.name(day) != null || day.toEpochDay() in absent) return 0L
         return if (day.dayOfWeek.value in p.workDays) p.workNormMin * 60_000L else 0L
+    }
+
+    /** Wymiar za [from, to): suma norm dni, minus dzień pracy za każde święto w sobotę (gdy sobota wolna). */
+    fun normRange(ctx: Context, from: LocalDate, to: LocalDate, absent: Set<Long>): Long {
+        val p = Prefs(ctx)
+        var sum = 0L
+        var d = from
+        while (d < to) {
+            sum += normFor(ctx, d, absent)
+            if (d.dayOfWeek.value == 6 && 6 !in p.workDays && Holidays.name(d) != null) sum -= p.workNormMin * 60_000L
+            d = d.plusDays(1)
+        }
+        return sum.coerceAtLeast(0L)
     }
 
     fun day(ctx: Context, entries: List<Entry>, cats: Map<Long, Category>, day: LocalDate, now: Long): WorkDay? {
@@ -120,12 +139,18 @@ object WorkTime {
         val places = app.db.places().getAll().associateBy { it.id }
         val now = System.currentTimeMillis()
         val today = LocalDate.now()
+        val absences = app.db.absences().range(start.toEpochDay(), end.toEpochDay())
+        val absent = absences.map { it.day }.toSet()
         val days = generateSequence(start) { it.plusDays(1) }.takeWhile { it < end && it <= today }
-            .mapNotNull { day(ctx, entries, cats, it, now) }.toList()
+            .mapNotNull { day(ctx, entries, cats, it, now)?.let { w -> w.copy(normMs = normFor(ctx, it, absent)) } }.toList()
         // Norma liczona do dziś (bieżący miesiąc) — żeby saldo nie było ujemne z góry.
-        val norm = generateSequence(start) { it.plusDays(1) }.takeWhile { it < end && it <= today }
-            .sumOf { normFor(ctx, it) }
-        WorkMonth(ym, days, norm, clients(ctx, entries, cats, places, start, end, now))
+        val norm = normRange(ctx, start, minOf(end, today.plusDays(1)), absent)
+        val holidays = generateSequence(start) { it.plusDays(1) }.takeWhile { it < end }
+            .mapNotNull { d -> Holidays.name(d)?.let { d to it } }.toList()
+        WorkMonth(
+            ym, days, norm, clients(ctx, entries, cats, places, start, end, now),
+            absences, holidays, normRange(ctx, start, end, absent),
+        )
     }
 
     /** Wizyty w kategorii „u klienta” pogrupowane wg zapisanego miejsca albo okolicy (100 m). */

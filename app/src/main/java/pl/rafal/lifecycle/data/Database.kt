@@ -334,10 +334,46 @@ interface WeatherDao {
     suspend fun upsertAll(list: List<WeatherDay>)
 }
 
+@Dao
+interface AbsenceDao {
+    @Query("SELECT * FROM absences WHERE day >= :from AND day < :to ORDER BY day")
+    suspend fun range(from: Long, to: Long): List<Absence>
+
+    @Query("SELECT * FROM absences WHERE day >= :from AND day < :to ORDER BY day")
+    fun observe(from: Long, to: Long): Flow<List<Absence>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(a: Absence)
+
+    @Query("DELETE FROM absences WHERE day = :day")
+    suspend fun delete(day: Long)
+
+    @Query("SELECT * FROM absences ORDER BY day")
+    suspend fun all(): List<Absence>
+}
+
+@Dao
+interface CarDao {
+    @Insert
+    suspend fun insert(c: CarSession): Long
+
+    @Update
+    suspend fun update(c: CarSession)
+
+    @Query("SELECT * FROM car_sessions WHERE endAt IS NULL ORDER BY startAt DESC LIMIT 1")
+    suspend fun open(): CarSession?
+
+    @Query("SELECT * FROM car_sessions WHERE startAt < :to AND (endAt IS NULL OR endAt > :from) ORDER BY startAt")
+    suspend fun range(from: Long, to: Long): List<CarSession>
+
+    @Query("SELECT * FROM car_sessions WHERE parkLat IS NOT NULL ORDER BY startAt DESC LIMIT 1")
+    fun observeLastParked(): Flow<CarSession?>
+}
+
 @Database(
     entities = [Category::class, Place::class, Entry::class, LocationSample::class, ScreenOff::class, Goal::class, StepBucket::class,
-        HealthSample::class, ExtEvent::class, ScreenDay::class, MoodDay::class, WeatherDay::class],
-    version = 7,
+        HealthSample::class, ExtEvent::class, ScreenDay::class, MoodDay::class, WeatherDay::class, Absence::class, CarSession::class],
+    version = 8,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -353,6 +389,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun screen(): ScreenDao
     abstract fun mood(): MoodDao
     abstract fun weather(): WeatherDao
+    abstract fun absences(): AbsenceDao
+    abstract fun cars(): CarDao
 
     companion object {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -423,9 +461,23 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE places ADD COLUMN privateZone INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `absences` (`day` INTEGER NOT NULL, `type` TEXT NOT NULL, `note` TEXT, PRIMARY KEY(`day`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `car_sessions` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`device` TEXT NOT NULL, `startAt` INTEGER NOT NULL, `endAt` INTEGER, `parkLat` REAL, `parkLng` REAL)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_car_sessions_startAt` ON `car_sessions` (`startAt`)")
+            }
+        }
+
         fun build(ctx: Context): AppDatabase =
             Room.databaseBuilder(ctx, AppDatabase::class.java, "lifecycle.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 .build()
     }
 }

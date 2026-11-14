@@ -76,6 +76,8 @@ data class Place(
     val radius: Double = 100.0,
     val categoryId: Long,
     val createdAt: Long = System.currentTimeMillis(),
+    /** Strefa prywatna: Doba nie zapisuje tu dokładnych punktów GPS, tylko pobyt w miejscu. */
+    val privateZone: Boolean = false,
 )
 
 @Entity(
@@ -264,4 +266,24 @@ data class WeatherDay(
     val lat: Double,
     val lng: Double,
     val updatedAt: Long,
+)
+
+/** Nieobecność w pracy: urlop, L4, dzień wolny. */
+@Entity(tableName = "absences")
+data class Absence(
+    @PrimaryKey val day: Long,
+    /** URLOP, L4, WOLNE, INNE */
+    val type: String,
+    val note: String? = null,
+)
+
+/** Połączenie z Bluetooth samochodu = jazda za kierownicą; po rozłączeniu zapamiętujemy parking. */
+@Entity(tableName = "car_sessions", indices = [Index("startAt")])
+data class CarSession(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val device: String,
+    val startAt: Long,
+    val endAt: Long? = null,
+    val parkLat: Double? = null,
+    val parkLng: Double? = null,
 )

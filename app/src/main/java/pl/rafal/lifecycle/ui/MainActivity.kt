@@ -218,7 +218,8 @@ fun AppRoot(startTab: String?) {
                 sub == "categories" -> CategoriesScreen(onBack = { sub = null })
                 sub == "permissions" -> PermissionsScreen(onBack = { sub = null })
                 sub == "goals" -> GoalsScreen(onBack = { sub = null })
-                sub == "work" -> WorkScreen(onBack = { sub = null })
+                sub == "work" -> WorkScreen(onBack = { sub = null }, onOpen = { sub = it })
+                sub == "mileage" -> MileageScreen(onBack = { sub = "work" })
                 sub == "trips" -> TripsScreen(onBack = { sub = null }, onOpen = { sub = it })
                 sub?.startsWith("trip:") == true -> TripDetailScreen(sub!!.removePrefix("trip:").toLong()) { sub = "trips" }
                 sub == "heatmap" -> HeatMapScreen(onBack = { sub = null })

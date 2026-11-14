@@ -406,6 +406,9 @@ object Backup {
                     .put("n", d.notifs).put("f", d.firstUse ?: JSONObject.NULL).put("a", d.apps).put("h", d.hours).put("t", d.updatedAt).put("s", d.sessions))
             }
         })
+        root.put("absences", JSONArray().apply {
+            db.absences().all().forEach { a -> put(JSONObject().put("d", a.day).put("t", a.type).put("n", a.note ?: JSONObject.NULL)) }
+        })
         root.put("mood", JSONArray().apply {
             db.mood().all().forEach { m ->
                 put(JSONObject().put("d", m.day).put("v", m.value).put("n", m.note ?: JSONObject.NULL).put("t", m.at))
@@ -478,6 +481,12 @@ object Backup {
                             x.optLongOrNull("f"), x.getString("a"), x.getString("h"), x.optLong("t"), x.optString("s", ""),
                         )
                     )
+                }
+            }
+            root.optJSONArray("absences")?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    val x = arr.getJSONObject(i)
+                    db.absences().upsert(pl.rafal.lifecycle.data.Absence(x.getLong("d"), x.getString("t"), x.optStringOrNull("n")))
                 }
             }
             root.optJSONArray("mood")?.let { arr ->

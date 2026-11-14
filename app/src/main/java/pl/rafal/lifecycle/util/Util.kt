@@ -248,6 +248,46 @@ class Prefs(ctx: Context) {
         get() = p.getInt("tripKm", 40)
         set(v) = p.edit().putInt("tripKm", v).apply()
 
+    // --- Kilometrówka i samochód
+    var carPlate: String
+        get() = p.getString("carPlate", "") ?: ""
+        set(v) = p.edit().putString("carPlate", v).apply()
+
+    var carEngineCc: Int
+        get() = p.getInt("carEngineCc", 0)
+        set(v) = p.edit().putInt("carEngineCc", v).apply()
+
+    var carOwner: String
+        get() = p.getString("carOwner", "") ?: ""
+        set(v) = p.edit().putString("carOwner", v).apply()
+
+    /** Stawka za km (zł); 0 = według pojemności silnika. */
+    var mileageRate: Float
+        get() = p.getFloat("mileageRate", 0f)
+        set(v) = p.edit().putFloat("mileageRate", v).apply()
+
+    /** Kilometrówka: także dojazd z domu do pierwszego miejsca pracy i powrót (praca w terenie). */
+    var mileageHomeTrips: Boolean
+        get() = p.getBoolean("mileageHomeTrips", true)
+        set(v) = p.edit().putBoolean("mileageHomeTrips", v).apply()
+
+    /** Adresy urządzeń Bluetooth samochodu. */
+    var carDevices: Set<String>
+        get() = p.getStringSet("carDevices", emptySet()) ?: emptySet()
+        set(v) = p.edit().putStringSet("carDevices", v).apply()
+
+    var lockEnabled: Boolean
+        get() = p.getBoolean("lockEnabled", false)
+        set(v) = p.edit().putBoolean("lockEnabled", v).apply()
+
+    var calendarExport: Long
+        get() = p.getLong("calendarExport", -1L)
+        set(v) = p.edit().putLong("calendarExport", v).apply()
+
+    var photosOn: Boolean
+        get() = p.getBoolean("photosOn", true)
+        set(v) = p.edit().putBoolean("photosOn", v).apply()
+
     var onboardingDone: Boolean
         get() = p.getBoolean("onboardingDone", false)
         set(v) = p.edit().putBoolean("onboardingDone", v).apply()

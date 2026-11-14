@@ -34,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -126,7 +127,7 @@ fun WorkDayCard(day: LocalDate, entries: List<Entry>, onOpen: () -> Unit) {
 /** Ewidencja czasu pracy: miesiąc, dni, saldo nadgodzin, klienci i eksport. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun WorkScreen(onBack: () -> Unit) {
+fun WorkScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}) {
     val ctx = LocalContext.current
     val prefs = remember { Prefs(ctx) }
     val scope = rememberCoroutineScope()
@@ -141,6 +142,7 @@ fun WorkScreen(onBack: () -> Unit) {
     var days by remember { mutableStateOf(prefs.workDays) }
     var travel by remember { mutableStateOf(prefs.workCountTravel) }
     var showSettings by remember { mutableStateOf(false) }
+    var absenceDialog by remember { mutableStateOf(false) }
     val dF = remember { DateTimeFormatter.ofPattern("EEE d.MM", Fmt.PL) }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
@@ -197,6 +199,10 @@ fun WorkScreen(onBack: () -> Unit) {
                         }) { Text("CSV") }
                         OutlinedButton(onClick = { showSettings = !showSettings }) { Text("Ustawienia") }
                     }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { onOpen("mileage") }) { Text("🚗 Kilometrówka") }
+                        OutlinedButton(onClick = { absenceDialog = true }) { Text("Urlop / L4") }
+                    }
                 }
             }
             if (showSettings) {
@@ -236,6 +242,41 @@ fun WorkScreen(onBack: () -> Unit) {
                         Text(
                             "Czas pracy to pobyty w kategoriach „Praca” i „Wizyta u klienta” — od pierwszego do ostatniego. " +
                                 "Wyjście na obiad czy sprawy prywatne liczą się jako przerwa.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            if (m.holidays.isNotEmpty() || m.absences.isNotEmpty()) {
+                item { SectionTitle("Święta i nieobecności") }
+                item {
+                    TrendCard {
+                        Text(
+                            "Wymiar w miesiącu: ${Fmt.durationShort(m.fullNormMs)}",
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        val dF2 = DateTimeFormatter.ofPattern("d MMM, EEE", Fmt.PL)
+                        m.holidays.forEach { (d, n) ->
+                            Text("🎉 ${d.format(dF2)} — $n", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 3.dp))
+                        }
+                        m.absences.forEach { a ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "${AbsenceTypes[a.type] ?: a.type} · ${LocalDate.ofEpochDay(a.day).format(dF2)}" +
+                                        (a.note?.let { " · $it" } ?: ""),
+                                    style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f),
+                                )
+                                TextButton(onClick = {
+                                    scope.launch {
+                                        withContext(Dispatchers.IO) { LifeApp.instance.db.absences().delete(a.day) }
+                                        tick++
+                                    }
+                                }) { Text("Usuń") }
+                            }
+                        }
+                        Text(
+                            "W święta i dni nieobecności norma wynosi 0. Święto w sobotę obniża wymiar o jeden dzień pracy.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -284,6 +325,50 @@ fun WorkScreen(onBack: () -> Unit) {
                 }
             }
         }
+    }
+    if (absenceDialog) AbsenceDialog(onDismiss = { absenceDialog = false }) { absenceDialog = false; tick++ }
+}
+
+val AbsenceTypes = linkedMapOf("URLOP" to "🏖️ Urlop", "L4" to "🤒 L4", "WOLNE" to "📅 Dzień wolny", "INNE" to "Inna nieobecność")
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun AbsenceDialog(onDismiss: () -> Unit, onSaved: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val state = androidx.compose.material3.rememberDateRangePickerState()
+    var type by remember { mutableStateOf("URLOP") }
+    androidx.compose.material3.DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(enabled = state.selectedStartDateMillis != null, onClick = {
+                val a = state.selectedStartDateMillis ?: return@TextButton
+                val b = state.selectedEndDateMillis ?: a
+                val from = java.time.Instant.ofEpochMilli(a).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                val to = java.time.Instant.ofEpochMilli(b).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                scope.launch {
+                    withContext(Dispatchers.IO) {
+                        var d = from
+                        while (d <= to) {
+                            // Weekendy i święta nie są dniami urlopu.
+                            if (d.dayOfWeek.value in Prefs(LifeApp.instance).workDays && pl.rafal.lifecycle.domain.Holidays.name(d) == null) {
+                                LifeApp.instance.db.absences().upsert(pl.rafal.lifecycle.data.Absence(d.toEpochDay(), type))
+                            }
+                            d = d.plusDays(1)
+                        }
+                    }
+                    onSaved()
+                }
+            }) { Text("Zapisz") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Anuluj") } },
+    ) {
+        FlowRow(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            AbsenceTypes.forEach { (k, l) -> FilterChip(selected = type == k, onClick = { type = k }, label = { Text(l) }) }
+        }
+        androidx.compose.material3.DateRangePicker(
+            state, Modifier.weight(1f),
+            title = { Text("Wybierz dni nieobecności", Modifier.padding(start = 24.dp, top = 8.dp)) },
+        )
     }
 }
 
