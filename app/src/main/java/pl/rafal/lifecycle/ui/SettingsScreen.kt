@@ -331,6 +331,8 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
                 "Mam hulajnogę elektryczną",
                 "Spokojna jazda 12–30 km/h bez pedałowania zapisze się jako „Hulajnoga”", scooter,
             ) { scooter = it; prefs.scooter = it }
+            HorizontalDivider(Modifier.padding(start = 16.dp))
+            CarSettings()
         }
 
         SectionTitle("Miejsca i wyjazdy")
@@ -366,6 +368,9 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
                 }
             }
         }
+
+        SectionTitle("Prywatność, zdjęcia i kalendarz")
+        Group { PrivacySettings() }
 
         SectionTitle("Cele i podsumowania")
         Group {

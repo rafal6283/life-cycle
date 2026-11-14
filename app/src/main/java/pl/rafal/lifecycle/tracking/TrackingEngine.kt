@@ -66,12 +66,26 @@ class TrackingEngine(
             .apply()
     }
 
+    private var privateZones: List<pl.rafal.lifecycle.data.Place> = emptyList()
+    private var privateLoadedAt = 0L
+
+    private suspend fun inPrivateZone(lat: Double, lng: Double, now: Long): Boolean {
+        if (now - privateLoadedAt > 5 * 60_000L || now < privateLoadedAt) {
+            privateZones = db.places().getAll().filter { it.privateZone }
+            privateLoadedAt = now
+        }
+        return privateZones.any { Geo.distance(lat, lng, it.lat, it.lng) <= it.radius + 50 }
+    }
+
     suspend fun onLocation(lat: Double, lng: Double, acc: Float, time: Long) {
         mutex.withLock {
             if (acc > MAX_ACCURACY) return@withLock
             val lastFix = prefs.getLong("lastFix", 0L)
             if (time <= lastFix) return@withLock
-            db.locations().insert(LocationSample(time = time, lat = lat, lng = lng, accuracy = acc))
+            // Strefa prywatna: bez dokładnych punktów GPS (tylko pobyt w miejscu).
+            if (!inPrivateZone(lat, lng, time)) {
+                db.locations().insert(LocationSample(time = time, lat = lat, lng = lng, accuracy = acc))
+            }
             prefs.edit().putLong("lastFix", time).apply()
 
             // Długa przerwa w danych podczas jazdy — zamknij przejazd.
@@ -175,7 +189,9 @@ class TrackingEngine(
         db.entries().insert(
             Entry(
                 startAt = since, endAt = null, categoryId = catId, placeId = place?.id,
-                lat = lat, lng = lng, source = Source.AUTO_STAY,
+                lat = if (place?.privateZone == true) place.lat else lat,
+                lng = if (place?.privateZone == true) place.lng else lng,
+                source = Source.AUTO_STAY,
             )
         )
         mode = MODE_STAY

@@ -292,6 +292,13 @@ fun DayScreen(healthNav: () -> Unit = {}, onOpen: (String) -> Unit = {}) {
             }
             item { WorkDayCard(day, entries) { onOpen("work") } }
             item { MoodCard(day) }
+            item { DayStoryCard(day, entries.size) { onOpen("diary") } }
+            item {
+                PhotoStrip("Zdjęcia z tego dnia", from, to, label = { t ->
+                    segments.firstOrNull { t >= it.start && t < it.end }?.let { catMap[it.entry.categoryId]?.name }
+                })
+            }
+            if (day == LocalDate.now()) item { ParkingCard() }
 
             if (goalProgress.isNotEmpty()) {
                 item { SectionTitle(if (isToday) "Cele" else "Cele (stan na ten dzień)") }

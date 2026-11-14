@@ -84,17 +84,38 @@ import pl.rafal.lifecycle.tracking.TrackingControl
 import pl.rafal.lifecycle.tracking.WorkoutImporter
 import pl.rafal.lifecycle.util.Prefs
 
-class MainActivity : ComponentActivity() {
+class MainActivity : androidx.fragment.app.FragmentActivity() {
+    private var locked by androidx.compose.runtime.mutableStateOf(false)
+    private var stoppedAt = 0L
+
+    private fun unlock() = AppLock.prompt(this) { locked = false }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val startTab = if (handleImport(intent)) "health" else intent?.getStringExtra("tab")
+        locked = Prefs(this).lockEnabled
         setContent {
             LifeTheme {
                 Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
-                    AppRoot(startTab)
+                    if (locked) LockScreen { unlock() } else AppRoot(startTab)
                 }
             }
+        }
+        if (locked) unlock()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        stoppedAt = System.currentTimeMillis()
+    }
+
+    override fun onRestart() {
+        super.onRestart()
+        // Po minucie w tle — znowu blokada.
+        if (Prefs(this).lockEnabled && System.currentTimeMillis() - stoppedAt > 60_000L && !locked) {
+            locked = true
+            unlock()
         }
     }
 
@@ -220,6 +241,7 @@ fun AppRoot(startTab: String?) {
                 sub == "goals" -> GoalsScreen(onBack = { sub = null })
                 sub == "work" -> WorkScreen(onBack = { sub = null }, onOpen = { sub = it })
                 sub == "mileage" -> MileageScreen(onBack = { sub = "work" })
+                sub == "diary" -> DiaryScreen(onBack = { sub = null })
                 sub == "trips" -> TripsScreen(onBack = { sub = null }, onOpen = { sub = it })
                 sub?.startsWith("trip:") == true -> TripDetailScreen(sub!!.removePrefix("trip:").toLong()) { sub = "trips" }
                 sub == "heatmap" -> HeatMapScreen(onBack = { sub = null })

@@ -188,6 +188,7 @@ fun PlaceEditorDialog(draft: PlaceDraft, categories: List<Category>, onDismiss: 
     var lng by remember { mutableDoubleStateOf(draft.lng) }
     var radius by remember { mutableFloatStateOf((existing?.radius ?: draft.suggestedRadius ?: 100.0).toFloat().coerceIn(30f, 1000f)) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var priv by remember { mutableStateOf(existing?.privateZone ?: false) }
     val valid = name.isNotBlank() && catId != null
 
     val places by repo.places.collectAsState(initial = emptyList())
@@ -277,6 +278,16 @@ fun PlaceEditorDialog(draft: PlaceDraft, categories: List<Category>, onDismiss: 
                 Spacer(Modifier.height(8.dp))
                 Text("Promień: ${radius.toInt()} m", style = MaterialTheme.typography.labelLarge)
                 Slider(value = radius, onValueChange = { radius = it }, valueRange = 30f..1000f)
+                Row(Modifier.fillMaxWidth().clickable { priv = !priv }, verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("🔒 Strefa prywatna", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "Doba zapisze tylko, że tu byłeś — bez dokładnych punktów GPS. Zapisane już punkty w strefie zostaną usunięte.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    androidx.compose.material3.Switch(priv, { priv = it })
+                }
 
                 if (nearPlaces.isNotEmpty() || nearUnknown.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
@@ -323,10 +334,18 @@ fun PlaceEditorDialog(draft: PlaceDraft, categories: List<Category>, onDismiss: 
                                 radius = radius.toDouble(),
                                 categoryId = cid,
                                 createdAt = existing?.createdAt ?: System.currentTimeMillis(),
+                                privateZone = priv,
                             )
                             val saved = base.copy(id = repo.savePlace(base))
                             nearPlaces.filter { it.first.id in mergePlaces }.forEach { repo.mergePlace(it.first, saved) }
                             mergeUnknown.forEach { repo.attachUnknownNear(it.lat, it.lng, 160.0, saved) }
+                            if (priv) {
+                                val db = LifeApp.instance.db
+                                val dLat = (saved.radius + 50) / 111_000.0
+                                val dLng = dLat / kotlin.math.cos(Math.toRadians(saved.lat))
+                                db.locations().deleteBox(saved.lat - dLat, saved.lat + dLat, saved.lng - dLng, saved.lng + dLng)
+                                db.entries().blurPlace(saved.id, saved.lat, saved.lng)
+                            }
                             onDismiss()
                         }
                     }) { Text("Zapisz") }

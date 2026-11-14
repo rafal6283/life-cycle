@@ -274,6 +274,7 @@ fun TripDetailScreen(start: Long, onBack: () -> Unit) {
             }
         }
         if (x.totals.isNotEmpty()) {
+            item { PhotoStrip("Zdjęcia z wyjazdu", t.start, t.end, size = 120) }
             item { SectionTitle("Na co poszedł czas") }
             item {
                 val sum = x.totals.sumOf { it.second }.coerceAtLeast(1)

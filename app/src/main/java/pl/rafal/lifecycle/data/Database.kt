@@ -237,6 +237,9 @@ interface EntryDao {
     @Query("SELECT * FROM entries WHERE id = :id")
     suspend fun byId(id: Long): Entry?
 
+    @Query("UPDATE entries SET lat = :lat, lng = :lng WHERE placeId = :place")
+    suspend fun blurPlace(place: Long, lat: Double, lng: Double)
+
     @Query("UPDATE entries SET placeId = :to, categoryId = :cat WHERE placeId = :from")
     suspend fun movePlace(from: Long, to: Long, cat: Long)
 
@@ -278,6 +281,9 @@ interface EntryDao {
 interface LocationDao {
     @Insert
     suspend fun insert(l: LocationSample)
+
+    @Query("DELETE FROM locations WHERE lat BETWEEN :la1 AND :la2 AND lng BETWEEN :lo1 AND :lo2")
+    suspend fun deleteBox(la1: Double, la2: Double, lo1: Double, lo2: Double)
 
     @Query("SELECT * FROM locations ORDER BY time DESC LIMIT 1")
     suspend fun last(): LocationSample?

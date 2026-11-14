@@ -169,7 +169,9 @@ object TransportDetect {
             .take(12)
         for (m in moves) {
             val end = m.endAt!!
-            if (m.categoryId == travel && end - m.startAt >= 4 * 60_000L) {
+            // Za kierownicą (Bluetooth auta) — to samochód, nie komunikacja.
+            val driving = db.cars().range(m.startAt, end).isNotEmpty()
+            if (!driving && m.categoryId == travel && end - m.startAt >= 4 * 60_000L) {
                 val p = profile(db.locations().range(m.startAt, end))
                 if (p != null) {
                     val kind = try {

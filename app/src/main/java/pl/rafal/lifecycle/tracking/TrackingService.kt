@@ -312,6 +312,7 @@ class WatchdogWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
         safe("Przypomnienie o nastroju") { MoodReminder.run(ctx) }
         safe("Przegląd dnia") { ReviewReminder.run(ctx) }
         safe("Pogoda") { WeatherSync.run(ctx) }
+        safe("Kalendarz") { pl.rafal.lifecycle.domain.CalendarExport.daily(ctx) }
         safe("Kopia zapasowa") { Backup.autoBackup(ctx) }
         safe("Widżet") { DobaWidget.updateAll(ctx) }
         val db = (applicationContext as LifeApp).db
