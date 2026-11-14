@@ -222,6 +222,9 @@ fun AppRoot(startTab: String?) {
                 sub == "trips" -> TripsScreen(onBack = { sub = null }, onOpen = { sub = it })
                 sub?.startsWith("trip:") == true -> TripDetailScreen(sub!!.removePrefix("trip:").toLong()) { sub = "trips" }
                 sub == "heatmap" -> HeatMapScreen(onBack = { sub = null })
+                sub?.startsWith("review:") == true -> ReviewScreen(java.time.LocalDate.ofEpochDay(sub!!.removePrefix("review:").toLong())) { sub = null }
+                sub == "search" -> SearchScreen(onBack = { sub = null })
+                sub == "tracking-health" -> TrackingHealthScreen(onBack = { sub = null }, onPermissions = { sub = "permissions" })
                 sub?.startsWith("year:") == true -> YearRecapScreen(sub!!.removePrefix("year:").toInt()) { sub = null }
                 sub == "koofr" -> pl.rafal.koofr.KoofrScreen(onBack = { sub = null })
                 sub?.startsWith("summary") == true -> SummaryScreen(sub) { sub = null }

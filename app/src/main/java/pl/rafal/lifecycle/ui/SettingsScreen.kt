@@ -225,6 +225,11 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
             }
         }
 
+        SectionTitle("Niezawodność")
+        Group {
+            NavRow("Kontrola śledzenia", "Uprawnienia, bateria, luki w danych — i co z nimi zrobić") { onOpen("tracking-health") }
+        }
+
         SectionTitle("Praca")
         Group {
             NavRow("Ewidencja czasu pracy", "Godziny, przerwy, nadgodziny, klienci · PDF i CSV") { onOpen("work") }

@@ -291,6 +291,8 @@ class BootReceiver : BroadcastReceiver() {
 
 class WatchdogWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result {
+        applicationContext.getSharedPreferences("engine", Context.MODE_PRIVATE).edit()
+            .putLong("watchdogAt", System.currentTimeMillis()).apply()
         TrackingControl.startIfAllowed(applicationContext)
         val ctx = applicationContext
         suspend fun safe(name: String, block: suspend () -> Unit) = try {
@@ -308,6 +310,7 @@ class WatchdogWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
         safe("Sprawdzanie celów") { GoalChecker.run(ctx) }
         safe("Podsumowanie tygodnia") { pl.rafal.lifecycle.domain.Summaries.maybeNotify(ctx) }
         safe("Przypomnienie o nastroju") { MoodReminder.run(ctx) }
+        safe("Przegląd dnia") { ReviewReminder.run(ctx) }
         safe("Pogoda") { WeatherSync.run(ctx) }
         safe("Kopia zapasowa") { Backup.autoBackup(ctx) }
         safe("Widżet") { DobaWidget.updateAll(ctx) }
@@ -341,6 +344,26 @@ object MoodReminder {
         if (db.mood().get(today) != null) return
         p.moodNotified = today
         Notifications.simple(ctx, 7100, Notifications.CH_GOALS, "Jak minął dzień?", "Oceń go jednym dotknięciem 😞 🙁 😐 🙂 😄", "day")
+    }
+}
+
+/** Wieczorem: przypomnienie o przeglądzie dnia, gdy są luki lub nieznane miejsca. */
+object ReviewReminder {
+    suspend fun run(ctx: Context) {
+        val sp = ctx.getSharedPreferences("engine", Context.MODE_PRIVATE)
+        if (!sp.getBoolean("reviewReminder", true)) return
+        val now = java.time.LocalDateTime.now()
+        val today = now.toLocalDate()
+        if (sp.getLong("reviewNotified", -1L) == today.toEpochDay()) return
+        val min = now.hour * 60 + now.minute
+        if (min < 21 * 60 + 30 || min > 23 * 60 + 30) return
+        val n = pl.rafal.lifecycle.domain.Review.forDay(ctx, today).size
+        sp.edit().putLong("reviewNotified", today.toEpochDay()).apply()
+        if (n < 2) return
+        Notifications.simple(
+            ctx, 7101, Notifications.CH_GOALS, "Przejrzyj dzień",
+            "$n rzeczy do uzupełnienia — luki i nieznane miejsca. Zajmie minutę.", "day",
+        )
     }
 }
 
