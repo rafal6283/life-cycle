@@ -53,6 +53,13 @@ class LifeApp : Application() {
             repo.categoryByKind(pl.rafal.lifecycle.data.Kind.STOP)
         }
         pl.rafal.lifecycle.tracking.StepsRecorder.fixedSince(this)
+        // Epizody AF z Rytmu Snu przyszły kiedyś w pliku z wiatrami — przenieś je do osobnego źródła rytmu.
+        appScope.launch {
+            val ext = db.ext()
+            if (ext.all().none { it.source == pl.rafal.lifecycle.domain.ExchangeImport.SRC_RHYTHM }) {
+                ext.moveType(pl.rafal.lifecycle.domain.ExchangeImport.SRC_NIGHT, pl.rafal.lifecycle.domain.ExchangeImport.SRC_RHYTHM, "af")
+            }
+        }
         WatchdogWorker.schedule(this)
         // kopia i podgląd na rodzinnym Koofr (szyfrowane na telefonie)
         pl.rafal.koofr.Koofr.init(this, pl.rafal.lifecycle.cloud.DobaCloud)

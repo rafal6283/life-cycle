@@ -31,6 +31,7 @@ fun importedFrom(source: String): String = when (source) {
     ExchangeImport.SRC_NIGHT, ExchangeImport.SRC_NIGHT_NEW -> "z Rytmu Snu"
     ExchangeImport.SRC_KRESKA -> "z Kreski"
     ExchangeImport.SRC_ECG -> "z Polar EKG"
+    ExchangeImport.SRC_RHYTHM -> "z Rytmu Snu"
     else -> "zaimportowane"
 }
 

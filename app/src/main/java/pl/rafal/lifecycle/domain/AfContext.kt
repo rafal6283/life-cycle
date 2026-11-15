@@ -7,7 +7,7 @@ import pl.rafal.lifecycle.data.Place
 import pl.rafal.lifecycle.util.Fmt
 
 /**
- * Obciążenie AF (z Polar EKG) w podziale na to, co robiłeś i gdzie byłeś (wpisy Doby).
+ * Obciążenie AF (z Polar EKG i z opaski w Rytmie Snu) w podziale na to, co robiłeś i gdzie byłeś (wpisy Doby).
  * Liczy się tylko czas, gdy opaska nagrywała (okna zapisu), więc miejsce, w którym rzadko nosisz opaskę,
  * nie wygląda na „bezpieczne” tylko dlatego, że nie było pomiaru.
  */
@@ -62,7 +62,8 @@ object AfContext {
         ext: List<ExtEvent>,
         now: Long = System.currentTimeMillis(),
     ): Result? {
-        val ecg = ext.filter { it.source == ExchangeImport.SRC_ECG }
+        // EKG z Polar EKG i nieregularny rytm z opaski (Rytm Snu) — z ich własnym czasem monitorowania.
+        val ecg = ext.filter { it.source in ExchangeImport.AF_SOURCES }
         val windows = union(ecg.filter { it.type == "window" && it.end != null }.map { Span(it.start, it.end!!) })
         if (windows.isEmpty()) return null
         val af = union(ecg.filter { it.type == "af" && it.end != null }.map { Span(it.start, it.end!!) })

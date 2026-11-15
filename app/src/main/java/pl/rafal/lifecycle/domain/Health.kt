@@ -104,11 +104,17 @@ object ExchangeImport {
     const val SRC_NIGHT_NEW = "rytm-snu"
     const val SRC_KRESKA = "kreska"
     const val SRC_ECG = "polar-ekg"
+    /** Rytm Snu: nieregularny rytm (podejrzenie AF) z odstępów RR opaski — osobny plik, niezależny od wiatrów. */
+    const val SRC_RHYTHM = "rytm-snu-rytm"
+
+    /** Źródła epizodów AF: EKG z Polar EKG i nieregularny rytm z opaski w Rytmie Snu. */
+    val AF_SOURCES = setOf(SRC_ECG, SRC_RHYTHM)
 
     fun sourceLabel(source: String, label: String): String = when (source) {
         SRC_NIGHT -> "Rytm Snu"
         SRC_KRESKA -> "Kreska" + if (label.isNotBlank()) ": $label" else ""
         SRC_ECG -> "Polar EKG"
+        SRC_RHYTHM -> "Rytm Snu (opaska)"
         else -> source
     }
 
@@ -137,11 +143,12 @@ object ExchangeImport {
             throw IllegalArgumentException("To nie jest plik z Rytmu Snu, Kreski ani Polar EKG")
         }
         val source = j.optString("source").let { if (it == SRC_NIGHT_NEW) SRC_NIGHT else it }
-        if (source !in setOf(SRC_NIGHT, SRC_KRESKA, SRC_ECG)) {
+        if (source !in setOf(SRC_NIGHT, SRC_KRESKA, SRC_ECG, SRC_RHYTHM)) {
             throw IllegalArgumentException(if (source == "doba") "To eksport z Doby" else "Nieznane źródło: $source")
         }
         val label = if (source == SRC_KRESKA) j.optString("counter", "") else ""
         val out = ArrayList<ExtEvent>()
+        val legacyAf = ArrayList<ExtEvent>()
         val windows = j.optJSONArray("windows")
         if (windows != null) for (i in 0 until windows.length()) {
             val w = windows.getJSONObject(i)
@@ -151,6 +158,15 @@ object ExchangeImport {
         if (events != null) for (i in 0 until events.length()) {
             val e = events.getJSONObject(i)
             if (e.has("verified") && !e.isNull("verified") && !e.getBoolean("verified")) continue
+            // Starsze wersje Rytmu Snu wysyłały AF w pliku z wiatrami — przenosimy do źródła „rytm”,
+            // chyba że przyszedł już osobny plik z rytmem (ma okna monitorowania).
+            if (source == SRC_NIGHT && e.optString("type") == "af") {
+                legacyAf += ExtEvent(
+                    source = SRC_RHYTHM, label = "", type = "af", start = e.getLong("start"),
+                    end = if (e.has("end") && !e.isNull("end")) e.getLong("end") else null,
+                )
+                continue
+            }
             out += ExtEvent(
                 source = source, label = label, type = e.getString("type"), start = e.getLong("start"),
                 end = if (e.has("end") && !e.isNull("end")) e.getLong("end") else null,
@@ -169,6 +185,10 @@ object ExchangeImport {
         val db = LifeApp.instance.db
         db.ext().deleteSource(source, label)
         db.ext().insertAll(out)
+        if (legacyAf.isNotEmpty() && db.ext().all().none { it.source == SRC_RHYTHM && it.type == "window" }) {
+            db.ext().deleteSource(SRC_RHYTHM, "")
+            db.ext().insertAll(legacyAf)
+        }
         val n = out.count { it.type != "window" && it.type != "day_total" }
         if (!ExtVisibility.visible(source, label)) {
             return "Zaimportowano z ${sourceLabel(source, label)}, ale to źródło jest ukryte — włącz je w Ustawieniach → Dane z innych aplikacji"
@@ -176,6 +196,7 @@ object ExchangeImport {
         return "Zaimportowano z ${sourceLabel(source, label)}: " + when (source) {
             SRC_NIGHT -> "FF: $n, nocy: ${out.count { it.type == "window" }}"
             SRC_ECG -> "$n epizodów AF"
+            SRC_RHYTHM -> "$n epizodów nieregularnego rytmu, nocy z opaską: ${out.count { it.type == "window" }}"
             else -> "$n kliknięć, ${out.count { it.type == "day_total" }} dni"
         }
     }
@@ -185,6 +206,9 @@ object ExchangeImport {
         val l = events.filter { it.source == source && it.label == label }
         return if (source == SRC_KRESKA) {
             l.filter { it.type == "day_total" }.associate { Fmt.toLocalDate(it.start) to it.value.toInt() }
+        } else if (source == SRC_RHYTHM) {
+            // Noc z opaską przypisana do dnia pobudki, jak w Rytmie Snu.
+            l.filter { it.type == "af" }.groupingBy { Fmt.toLocalDate(it.start - 12 * 3_600_000L).plusDays(1) }.eachCount()
         } else if (source == SRC_NIGHT) {
             // Noc przypisana do dnia pobudki (zdarzenie − 12 h → data wieczoru, +1 dzień).
             l.filter { it.type == "fart" }.groupingBy { Fmt.toLocalDate(it.start - 12 * 3_600_000L).plusDays(1) }

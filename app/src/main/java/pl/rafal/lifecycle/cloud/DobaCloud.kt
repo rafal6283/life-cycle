@@ -88,6 +88,7 @@ object DobaCloud : KoofrApp {
             "rytm-snu" to "Rytm Snu (FF w nocy)",
             "kreska" to "Kreska (udostępnione liczniki)",
             "polar-ekg" to "Polar EKG (epizody AF)",
+            "rytm-snu-rytm" to "Rytm Snu (nieregularny rytm z opaski)",
         )
 
         override suspend fun import(ctx: Context, name: String, data: ByteArray) {

@@ -192,11 +192,12 @@ object Summaries {
             val name = when (src) {
                 ExchangeImport.SRC_NIGHT -> "FF w nocy"
                 ExchangeImport.SRC_ECG -> "Epizody AF"
+                ExchangeImport.SRC_RHYTHM -> "Nieregularny rytm w nocy"
                 else -> "Licznik $label"
             }
             val avg = cur.values.sum().toDouble() / cur.size
             val pAvg = if (pr.isEmpty()) null else pr.values.sum().toDouble() / pr.size
-            extRows += SumRow(name, "${cur.values.sum()} · śr. ${String.format(Fmt.PL, "%.1f", avg)} / ${if (src == ExchangeImport.SRC_NIGHT) "noc" else "dzień"}", dNum(avg, pAvg, 1), null)
+            extRows += SumRow(name, "${cur.values.sum()} · śr. ${String.format(Fmt.PL, "%.1f", avg)} / ${if (src == ExchangeImport.SRC_NIGHT || src == ExchangeImport.SRC_RHYTHM) "noc" else "dzień"}", dNum(avg, pAvg, 1), null)
         }
         if (extRows.isNotEmpty()) sections += SumSection("Z innych aplikacji", "air", 0xFF8E44AD, extRows)
 
@@ -293,6 +294,16 @@ object Summaries {
             val af = ext.filter { it.source == ExchangeImport.SRC_ECG && it.type == "af" }
             val afCur = af.filter { it.start >= curFrom && it.start < to }
             val afPrev = af.filter { it.start < curFrom }
+            // nieregularny rytm z opaski w nocy (Rytm Snu)
+            val rh = ext.filter { it.source == ExchangeImport.SRC_RHYTHM && it.type == "af" }
+            if (rh.isNotEmpty() && ExtVisibility.visible(ExchangeImport.SRC_RHYTHM, "")) {
+                val cur = rh.filter { it.start >= curFrom && it.start < to }
+                val prv = rh.filter { it.start < curFrom }
+                val min = cur.sumOf { ((it.end ?: it.start) - it.start) / 60_000L }
+                rows += SumRow("Nieregularny rytm w nocy (Rytm Snu)", if (cur.isEmpty()) "brak" else "${cur.size} · ${Fmt.durationShort(min * 60_000)}",
+                    if (prv.isEmpty() && cur.isEmpty()) null else "${prv.size} tydzień wcześniej".takeIf { p.type == PeriodType.WEEK },
+                    cur.size <= prv.size, "heart", 0xFFFF6482.toInt())
+            }
             if (af.isNotEmpty()) {
                 val min = afCur.sumOf { ((it.end ?: it.start) - it.start) / 60_000L }
                 rows += SumRow("Napady AF (Polar EKG)", if (afCur.isEmpty()) "brak" else "${afCur.size} · ${Fmt.durationShort(min * 60_000)}",

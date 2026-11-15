@@ -429,11 +429,13 @@ private fun ExtCard(
     val color = when (source) {
         ExchangeImport.SRC_NIGHT -> Color(0xFF8E44AD)
         ExchangeImport.SRC_ECG -> Color(0xFFFF2D55)
+        ExchangeImport.SRC_RHYTHM -> Color(0xFFFF6482)
         else -> Color(0xFFFF9F0A)
     }
     val title = when (source) {
         ExchangeImport.SRC_NIGHT -> "FF w nocy"
         ExchangeImport.SRC_ECG -> "Epizody AF"
+        ExchangeImport.SRC_RHYTHM -> "Nieregularny rytm w nocy"
         // zdarzenie z Kreski (np. AFIB) — liczba zdarzeń dziennie
         else -> if (ext.any { it.source == source && it.label == label && it.type == "session" }) label else "Licznik $label"
     }
@@ -444,7 +446,7 @@ private fun ExtCard(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(30.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) {
-                Icon(CatIcons.get(if (source == ExchangeImport.SRC_ECG) "heart" else "air"), null, tint = Color.White, modifier = Modifier.size(18.dp))
+                Icon(CatIcons.get(if (source in ExchangeImport.AF_SOURCES) "heart" else "air"), null, tint = Color.White, modifier = Modifier.size(18.dp))
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
@@ -462,7 +464,7 @@ private fun ExtCard(
             Text("${counts[today] ?: 0}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(4.dp))
             Text(
-                if (source == ExchangeImport.SRC_NIGHT) "ostatniej nocy" else "dziś",
+                if (source == ExchangeImport.SRC_NIGHT || source == ExchangeImport.SRC_RHYTHM) "ostatniej nocy" else "dziś",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 3.dp),
@@ -726,6 +728,7 @@ private fun ExtDetailDialog(source: String, label: String, onDismiss: () -> Unit
     val color = when (source) {
         ExchangeImport.SRC_NIGHT -> Color(0xFF8E44AD)
         ExchangeImport.SRC_ECG -> Color(0xFFFF2D55)
+        ExchangeImport.SRC_RHYTHM -> Color(0xFFFF6482)
         else -> Color(0xFFFF9F0A)
     }
     // Rozkład godzinowy (tylko zdarzenia z godziną)
@@ -752,7 +755,7 @@ private fun ExtDetailDialog(source: String, label: String, onDismiss: () -> Unit
                     val p = picked
                     if (p != null) {
                         androidx.compose.material3.TextButton(onClick = { day = p; days = 1; picked = null }) {
-                            Text("Pokaż ${if (source == ExchangeImport.SRC_NIGHT) "noc" else "dzień"} ${Fmt.dayTitle(p).lowercase()} →")
+                            Text("Pokaż ${if (source == ExchangeImport.SRC_NIGHT || source == ExchangeImport.SRC_RHYTHM) "noc" else "dzień"} ${Fmt.dayTitle(p).lowercase()} →")
                         }
                     }
                 }
@@ -771,7 +774,7 @@ private fun ExtDetailDialog(source: String, label: String, onDismiss: () -> Unit
                 SectionTitle("O której godzinie")
                 TrendCard { HourBars(hours, color) }
             }
-            if (source == ExchangeImport.SRC_ECG) AfContextSection(days)
+            if (source in ExchangeImport.AF_SOURCES) AfContextSection(days)
             Spacer(Modifier.height(24.dp))
         }
     }

@@ -97,6 +97,9 @@ interface HealthDao {
 
 @Dao
 interface ExtDao {
+    @Query("UPDATE ext_events SET source = :to WHERE source = :from AND type = :type")
+    suspend fun moveType(from: String, to: String, type: String)
+
     @Query("SELECT * FROM ext_events WHERE start >= :from AND start < :to ORDER BY start")
     fun observe(from: Long, to: Long): Flow<List<ExtEvent>>
 

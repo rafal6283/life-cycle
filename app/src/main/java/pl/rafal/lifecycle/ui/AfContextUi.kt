@@ -42,7 +42,7 @@ import java.time.LocalDate
 
 private val AF_RED = Color(0xFFFF2D55)
 
-/** Obciążenie AF według aktywności, miejsc i pory dnia — tylko w czasie nagrań Polar EKG. */
+/** Obciążenie AF według aktywności, miejsc i pory dnia — tylko w czasie nagrań Polar EKG i nocy z opaską (Rytm Snu). */
 @Composable
 fun AfContextSection(days: Int) {
     var res by remember { mutableStateOf<AfContext.Result?>(null) }
@@ -52,8 +52,9 @@ fun AfContextSection(days: Int) {
             val app = LifeApp.instance
             val to = Fmt.dayStart(LocalDate.now().plusDays(1))
             val from = Fmt.dayStart(LocalDate.now().minusDays(days.toLong() - 1))
-            if (!ExtVisibility.visible(ExchangeImport.SRC_ECG, "")) return@withContext null
-            val ext = app.db.ext().all().filter { it.start < to && (it.end ?: it.start) >= from }
+            val srcs = ExchangeImport.AF_SOURCES.filter { ExtVisibility.visible(it, "") }
+            if (srcs.isEmpty()) return@withContext null
+            val ext = app.db.ext().all().filter { it.source in srcs && it.start < to && (it.end ?: it.start) >= from }
             val entries = app.repo.getRange(from, to)
             val cats = app.db.categories().getAll().associateBy { it.id }
             val places = app.db.places().getAll().associateBy { it.id }
@@ -66,7 +67,7 @@ fun AfContextSection(days: Int) {
     SectionTitle("Gdzie i przy czym")
     TrendCard {
         if (r == null || r.total.monitoredMs <= 0) {
-            Text("Brak nagrań z Polar EKG w tym okresie.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Brak nagrań z Polar EKG ani nocy z opaską w Rytmie Snu w tym okresie.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             return@TrendCard
         }
         Text(
