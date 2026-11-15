@@ -69,8 +69,12 @@ fun AnimatedDonut(
     modifier: Modifier = Modifier,
     /** Czas przed ekranem: dla każdego wycinka odcinki (od, do) jako ułamki jego długości. */
     phone: List<List<Pair<Float, Float>>>? = null,
+    /** Długie przytrzymanie wycinka — np. edycja / wyjaśnienie aktywności. */
+    onLongPress: ((Any) -> Unit)? = null,
     centerContent: @Composable () -> Unit,
 ) {
+    val currentLong by rememberUpdatedState(onLongPress)
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val progress = remember(animKey) { Animatable(0f) }
     LaunchedEffect(animKey) {
         progress.snapTo(0f)
@@ -106,20 +110,28 @@ fun AnimatedDonut(
 
     Box(
         modifier.pointerInput(geo) {
-            detectTapGestures { pos ->
+            fun hitAt(pos: Offset): SliceGeo? {
                 val c = Offset(size.width / 2f, size.height / 2f)
                 val dx = pos.x - c.x
                 val dy = pos.y - c.y
                 val dist = sqrt(dx * dx + dy * dy)
                 val outer = size.width.coerceAtMost(size.height) / 2f - 14.dp.toPx()
                 val thick = outer * 0.44f
-                if (dist < outer - thick - 6.dp.toPx() || dist > outer + 10.dp.toPx()) {
-                    currentOnSelect(null)
-                    return@detectTapGestures
-                }
+                if (dist < outer - thick - 6.dp.toPx() || dist > outer + 10.dp.toPx()) return null
                 var ang = Math.toDegrees(atan2(dy, dx).toDouble()).toFloat()
                 while (ang < -90f) ang += 360f
-                val hit = geo.firstOrNull { ang >= it.start && ang < it.start + it.sweep }
+                return geo.firstOrNull { ang >= it.start && ang < it.start + it.sweep }
+            }
+            detectTapGestures(
+                onLongPress = { pos ->
+                    val hit = hitAt(pos) ?: return@detectTapGestures
+                    val cb = currentLong ?: return@detectTapGestures
+                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    currentOnSelect(hit.slice.key)
+                    cb(hit.slice.key)
+                },
+            ) { pos ->
+                val hit = hitAt(pos)
                 currentOnSelect(if (hit == null || hit.slice.key == currentSelected) null else hit.slice.key)
             }
         },

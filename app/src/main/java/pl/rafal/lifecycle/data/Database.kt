@@ -376,10 +376,25 @@ interface CarDao {
     fun observeLastParked(): Flow<CarSession?>
 }
 
+@Dao
+interface RouteDao {
+    @Query("SELECT * FROM routes WHERE entryId = :id")
+    suspend fun get(id: Long): RouteTrack?
+
+    @Query("SELECT entryId FROM routes")
+    suspend fun ids(): List<Long>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(r: RouteTrack)
+
+    @Query("DELETE FROM routes WHERE entryId NOT IN (SELECT id FROM entries)")
+    suspend fun pruneOrphans()
+}
+
 @Database(
     entities = [Category::class, Place::class, Entry::class, LocationSample::class, ScreenOff::class, Goal::class, StepBucket::class,
-        HealthSample::class, ExtEvent::class, ScreenDay::class, MoodDay::class, WeatherDay::class, Absence::class, CarSession::class],
-    version = 8,
+        HealthSample::class, ExtEvent::class, ScreenDay::class, MoodDay::class, WeatherDay::class, Absence::class, CarSession::class, RouteTrack::class],
+    version = 9,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -395,6 +410,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun screen(): ScreenDao
     abstract fun mood(): MoodDao
     abstract fun weather(): WeatherDao
+    abstract fun routes(): RouteDao
     abstract fun absences(): AbsenceDao
     abstract fun cars(): CarDao
 
@@ -481,9 +497,18 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `routes` (`entryId` INTEGER NOT NULL, `points` TEXT NOT NULL, " +
+                        "`distanceM` REAL NOT NULL, `savedAt` INTEGER NOT NULL, PRIMARY KEY(`entryId`))"
+                )
+            }
+        }
+
         fun build(ctx: Context): AppDatabase =
             Room.databaseBuilder(ctx, AppDatabase::class.java, "lifecycle.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 .build()
     }
 }

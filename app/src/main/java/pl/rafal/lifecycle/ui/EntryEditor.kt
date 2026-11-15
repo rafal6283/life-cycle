@@ -54,7 +54,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 @Composable
-fun EntryEditorDialog(entry: Entry?, defaultDay: LocalDate, onDismiss: () -> Unit) {
+fun EntryEditorDialog(entry: Entry?, defaultDay: LocalDate, onDismiss: () -> Unit, onRoute: ((Long) -> Unit)? = null) {
     val repo = LifeApp.instance.repo
     val scope = rememberCoroutineScope()
     val categories by repo.categories.collectAsState(initial = emptyList())
@@ -143,6 +143,10 @@ fun EntryEditorDialog(entry: Entry?, defaultDay: LocalDate, onDismiss: () -> Uni
                     singleLine = true,
                 )
 
+                if (entry != null && onRoute != null && entry.source == Source.AUTO_MOVE) {
+                    Spacer(Modifier.height(4.dp))
+                    TextButton(onClick = { onDismiss(); onRoute(entry.id) }) { Text("🗺️ Pokaż trasę na mapie") }
+                }
                 val la0 = entry?.lat
                 val ln0 = entry?.lng
                 if (entry != null && la0 != null && ln0 != null && entry.source == Source.AUTO_STAY) {

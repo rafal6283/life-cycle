@@ -287,3 +287,15 @@ data class CarSession(
     val parkLat: Double? = null,
     val parkLng: Double? = null,
 )
+
+/**
+ * Trasa przejazdu / spaceru zapisana na stałe (uproszczona), bo surowe punkty GPS są kasowane po 90 dniach.
+ * [points] = „lat,lng,s;…” (s = sekundy od początku przejazdu).
+ */
+@Entity(tableName = "routes")
+data class RouteTrack(
+    @PrimaryKey val entryId: Long,
+    val points: String,
+    val distanceM: Double,
+    val savedAt: Long = System.currentTimeMillis(),
+)

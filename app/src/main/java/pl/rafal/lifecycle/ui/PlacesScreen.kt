@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Luggage
+import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.IconButton
@@ -168,6 +169,7 @@ fun PlacesScreen(onOpen: (String) -> Unit = {}) {
     Column(Modifier.fillMaxSize()) {
         ScreenHeader("Miejsca") {
             IconButton(onClick = { onOpen("search") }) { Icon(Icons.Filled.Search, "Kiedy ostatnio") }
+            IconButton(onClick = { onOpen("routes") }) { Icon(Icons.Filled.Directions, "Trasy") }
             IconButton(onClick = { onOpen("trips") }) { Icon(Icons.Filled.Luggage, "Wyjazdy") }
             IconButton(onClick = { onOpen("heatmap") }) { Icon(Icons.Filled.Whatshot, "Gdzie bywasz") }
         }

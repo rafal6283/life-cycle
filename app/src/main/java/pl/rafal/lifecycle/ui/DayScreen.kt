@@ -201,6 +201,10 @@ fun DayScreen(healthNav: () -> Unit = {}, onOpen: (String) -> Unit = {}) {
                                 stroke = 40.dp,
                                 animKey = epochDay,
                                 phone = if (showPhone) phoneAbs.map { (a, b) -> a - from to b - from } else emptyList(),
+                                onLongPress = { off ->
+                                    val t = from + off
+                                    segments.firstOrNull { t >= it.start && t < it.end }?.let { editing = it.entry }
+                                },
                             )
                             DonutCenter(stepsTotal, tracked, null, if (showPhone) phoneTotal else 0L)
                         }
@@ -209,6 +213,13 @@ fun DayScreen(healthNav: () -> Unit = {}, onOpen: (String) -> Unit = {}) {
                             slices = daySlices.map { it.slice },
                             selected = selSlice,
                             onSelect = { selSlice = it },
+                            onLongPress = { key ->
+                                daySlices.firstOrNull { it.slice.key == key }?.let { d ->
+                                    segments.filter { it.end > d.start && it.start < d.end }
+                                        .maxByOrNull { minOf(it.end, d.end) - maxOf(it.start, d.start) }
+                                        ?.let { editing = it.entry }
+                                }
+                            },
                             animKey = "$epochDay-${daySlices.size > 0}",
                             modifier = Modifier.size(330.dp),
                             phone = if (showPhone && phoneAbs.isNotEmpty()) daySlices.map { d ->
@@ -356,7 +367,7 @@ fun DayScreen(healthNav: () -> Unit = {}, onOpen: (String) -> Unit = {}) {
         ) { Icon(Icons.Filled.Add, "Dodaj wpis", tint = Color.White) }
     }
 
-    editing?.let { EntryEditorDialog(entry = it, defaultDay = day, onDismiss = { editing = null }) }
+    editing?.let { EntryEditorDialog(entry = it, defaultDay = day, onDismiss = { editing = null }, onRoute = { id -> onOpen("route:$id") }) }
     if (showMap) DayMapDialog(day) { showMap = false }
     if (showScreen) ScreenTimeDialog(day) { showScreen = false }
     if (showField) FieldReportDialog(day) { showField = false }

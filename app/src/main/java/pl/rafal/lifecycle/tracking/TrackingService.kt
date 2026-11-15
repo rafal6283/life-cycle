@@ -317,6 +317,8 @@ class WatchdogWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
         safe("Widżet") { DobaWidget.updateAll(ctx) }
         val db = (applicationContext as LifeApp).db
         val now = System.currentTimeMillis()
+        // Najpierw utrwal trasy, potem kasuj stare punkty GPS.
+        try { pl.rafal.lifecycle.domain.Routes.archive(applicationContext) } catch (e: Exception) { Log.w(TrackingService.TAG, "Trasy: ${e.message}") }
         db.locations().prune(now - 90L * 24 * 3_600_000)
         db.screenOff().prune(now - 30L * 24 * 3_600_000)
         return Result.success()

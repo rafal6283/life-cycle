@@ -1,5 +1,7 @@
 package pl.rafal.lifecycle.ui
 
+import androidx.compose.ui.input.pointer.pointerInput
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -423,7 +425,11 @@ fun ClockRing(
     arcs: List<RingArc>, dayLength: Long, now: Long?, modifier: Modifier, stroke: Dp = 30.dp, animKey: Any = dayLength,
     /** Odcinki używania telefonu (ms od północy) — fioletowy pierścień wewnątrz tarczy. */
     phone: List<Pair<Long, Long>> = emptyList(),
+    /** Długie przytrzymanie: ms od początku dnia wskazane na tarczy. */
+    onLongPress: ((Long) -> Unit)? = null,
 ) {
+    val longCb = androidx.compose.runtime.rememberUpdatedState(onLongPress)
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val track = MaterialTheme.colorScheme.surfaceVariant
     val tickColor = MaterialTheme.colorScheme.onSurfaceVariant
     val nowColor = MaterialTheme.colorScheme.onSurface
@@ -431,7 +437,18 @@ fun ClockRing(
     val style = MaterialTheme.typography.labelSmall.copy(color = tickColor)
     // tarcza "nawija się" od północy przy pokazaniu dnia
     val grow = rememberGrow(animKey)
-    Canvas(modifier) {
+    val touch = if (onLongPress == null) Modifier else Modifier.pointerInput(dayLength) {
+        androidx.compose.foundation.gestures.detectTapGestures(onLongPress = { pos ->
+            val dx = pos.x - size.width / 2f
+            val dy = pos.y - size.height / 2f
+            // 0 = góra tarczy (północ), zgodnie ze wskazówkami zegara.
+            var ang = Math.toDegrees(kotlin.math.atan2(dy, dx).toDouble()) + 90.0
+            if (ang < 0) ang += 360.0
+            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+            longCb.value?.invoke((ang / 360.0 * dayLength).toLong())
+        })
+    }
+    Canvas(modifier.then(touch)) {
         val sw = stroke.toPx()
         val inset = sw / 2 + 16.dp.toPx()
         val d = size.minDimension - 2 * inset
