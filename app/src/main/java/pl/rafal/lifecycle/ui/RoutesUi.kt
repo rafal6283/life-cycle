@@ -94,7 +94,7 @@ fun RouteScreen(entryId: Long, onBack: () -> Unit, onOpen: (String) -> Unit) {
     val app = LifeApp.instance
     val categories by app.repo.categories.collectAsState(initial = emptyList())
     val catMap = remember(categories) { categories.associateBy { it.id } }
-    data class D(val info: RouteInfo?, val pts: List<RoutePoint>, val same: List<RouteInfo>)
+    data class D(val info: RouteInfo?, val pts: List<RoutePoint>, val same: List<RouteInfo>, val steps: Long = 0)
     val d by produceState<D?>(null, entryId) {
         val e = app.db.entries().byId(entryId) ?: run { value = D(null, emptyList(), emptyList()); return@produceState }
         val now = System.currentTimeMillis()
@@ -105,7 +105,14 @@ fun RouteScreen(entryId: Long, onBack: () -> Unit, onOpen: (String) -> Unit) {
             Routes.describe(ctx, now - 365L * 86_400_000L, now).filter { it.pairKey == key && it.entry.id != e.id }
                 .sortedByDescending { it.entry.startAt }
         } ?: emptyList()
-        value = D(info, pts, same)
+        // Kroki z kubełków godzinowych — proporcjonalnie do czasu trasy w każdej godzinie.
+        val end = e.endAt ?: now
+        val steps = app.db.steps().getRange(e.startAt - 3_600_000L, end).groupBy { it.hourStart }.entries.sumOf { (h, l) ->
+            val v = l.maxOf { it.steps }
+            val ov = (minOf(end, h + 3_600_000L) - maxOf(e.startAt, h)).coerceAtLeast(0L)
+            v * ov / 3_600_000L
+        }
+        value = D(info, pts, same, steps)
     }
     var showOthers by remember { mutableStateOf(false) }
     val others by produceState(emptyList<List<RoutePoint>>(), showOthers, d) {
@@ -153,7 +160,8 @@ fun RouteScreen(entryId: Long, onBack: () -> Unit, onOpen: (String) -> Unit) {
             }
         }
         item {
-            val st = Routes.stats(e, x.pts, cat?.kind)
+            val st = remember(x) { Routes.stats(e, x.pts, cat?.kind, x.steps) }
+            val walkLike = cat?.kind == pl.rafal.lifecycle.data.Kind.WALK || cat?.kind == pl.rafal.lifecycle.data.Kind.RUN
             TrendCard {
                 Row {
                     RStat(Fmt.distance(st.distanceM), "dystans", Modifier.weight(1f))
@@ -162,14 +170,63 @@ fun RouteScreen(entryId: Long, onBack: () -> Unit, onOpen: (String) -> Unit) {
                         st.paceSecPerKm?.let { pace(it) } ?: "${st.avgKmh.toInt()} km/h",
                         if (st.paceSecPerKm != null) "tempo" else "średnio", Modifier.weight(1f),
                     )
-                    if (st.paceSecPerKm == null && st.maxKmh > 0) RStat("${st.maxKmh.toInt()} km/h", "maks.", Modifier.weight(1f))
                 }
                 if (x.pts.size >= 2) {
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(10.dp))
+                    Row {
+                        RStat(Fmt.durationShort(st.movingMs), "w ruchu", Modifier.weight(1f))
+                        RStat(
+                            if (st.stops == 0) "0" else "${st.stops} · ${Fmt.durationShort(st.stopMs)}",
+                            if (walkLike) "przystanki" else "postoje", Modifier.weight(1f),
+                        )
+                        RStat(
+                            if (walkLike && st.movingMs > 0 && st.distanceM > 200) pace(st.movingMs / 1000.0 / (st.distanceM / 1000))
+                            else "${st.avgMovingKmh.toInt()} km/h",
+                            if (walkLike) "tempo w ruchu" else "śr. w ruchu", Modifier.weight(1f),
+                        )
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Row {
+                        RStat("${st.maxKmh.toInt()} km/h", "maks.", Modifier.weight(1f))
+                        RStat(if (st.steps > 0) Fmt.steps(st.steps) else "—", "kroków (ok.)", Modifier.weight(1f))
+                        RStat("${x.pts.size}", "punktów GPS", Modifier.weight(1f))
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text("Prędkość w czasie", style = MaterialTheme.typography.labelLarge)
+                    SpeedChart(st.profile)
                     Text(
-                        "Kolor trasy: zielony — szybciej, czerwony — wolniej (korki, światła, postoje).",
+                        "Kolor trasy na mapie: zielony — szybciej, czerwony — wolniej (korki, światła, postoje).",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+            }
+        }
+        val st0 = Routes.stats(e, x.pts, cat?.kind)
+        if (st0.splits.size >= 2) {
+            item { SectionTitle("Kilometr po kilometrze") }
+            item {
+                TrendCard {
+                    val best = st0.splits.min()
+                    st0.splits.forEachIndexed { i, ms ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("${i + 1} km", Modifier.width(52.dp), style = MaterialTheme.typography.bodySmall)
+                            Box(
+                                Modifier.weight(1f).height(10.dp).clip(RoundedCornerShape(5.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                            ) {
+                                Box(
+                                    Modifier.fillMaxWidth((best.toFloat() / ms).coerceIn(0.1f, 1f)).height(10.dp)
+                                        .clip(RoundedCornerShape(5.dp))
+                                        .background(if (ms == best) Color(0xFF34C759) else Color(0xFF0A84FF))
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                if (walkLikeKind(cat?.kind)) pace(ms / 1000.0) else "${Fmt.durationShort(ms)} · ${(3_600_000.0 / ms).toInt()} km/h",
+                                style = MaterialTheme.typography.bodySmall, fontWeight = if (ms == best) FontWeight.Bold else FontWeight.Normal,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -185,6 +242,7 @@ fun RouteScreen(entryId: Long, onBack: () -> Unit, onOpen: (String) -> Unit) {
                             if (info.durationMs <= avg) " · dziś szybciej niż zwykle 👍" else " · dziś o ${Fmt.durationShort(info.durationMs - avg)} dłużej",
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                    PairStats(all)
                     Spacer(Modifier.height(6.dp))
                     Row(Modifier.clickable { showOthers = !showOthers }, verticalAlignment = Alignment.CenterVertically) {
                         androidx.compose.material3.Checkbox(showOthers, { showOthers = it })
@@ -228,12 +286,21 @@ private fun RouteRow(r: RouteInfo, cat: String?, onClick: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text("${r.from} → ${r.to}", maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                "${Fmt.toLocalDate(r.entry.startAt).format(dayF)} · ${Fmt.time(r.entry.startAt)}" + (cat?.let { " · $it" } ?: "") +
-                    (r.entry.distanceM?.takeIf { it > 0 }?.let { " · ${Fmt.distance(it)}" } ?: ""),
+                "${Fmt.toLocalDate(r.entry.startAt).format(dayF)} · ${Fmt.time(r.entry.startAt)}" + (cat?.let { " · $it" } ?: ""),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Text(Fmt.durationShort(r.durationMs), fontWeight = FontWeight.SemiBold)
+        Column(horizontalAlignment = Alignment.End) {
+            Text(Fmt.durationShort(r.durationMs), fontWeight = FontWeight.SemiBold)
+            val d = r.entry.distanceM ?: 0.0
+            if (d > 0) {
+                val kmh = d / (r.durationMs / 1000.0).coerceAtLeast(1.0) * 3.6
+                Text(
+                    "${Fmt.distance(d)} · ${kmh.toInt()} km/h",
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 
@@ -250,6 +317,7 @@ fun RoutesScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     }
     var cat by rememberSaveable { mutableStateOf<Long?>(null) }
     var pair by rememberSaveable { mutableStateOf<String?>(null) }
+    var range by rememberSaveable { mutableStateOf(30) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
         item { ScreenHeader("Trasy", onBack = onBack) }
         val l = list
@@ -288,8 +356,112 @@ fun RoutesScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                 }
             }
         }
-        val shown = l.filter { (cat == null || it.entry.categoryId == cat) && (pair == null || it.pairKey == pair) }
+        val shown = l.filter {
+            (cat == null || it.entry.categoryId == cat) && (pair == null || it.pairKey == pair) &&
+                it.entry.startAt >= System.currentTimeMillis() - range * 86_400_000L
+        }
+        item {
+            Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(7 to "7 dni", 30 to "30 dni", 365 to "Rok").forEach { (d, t) -> FilterChip(range == d, { range = d }, { Text(t) }) }
+            }
+        }
+        if (shown.isNotEmpty()) item { RoutesSummary(shown, catMap) }
         item { SectionTitle(if (pair != null) "Przejazdy tą trasą · ${shown.size}" else "Ostatnie · ${shown.size}") }
         items(shown.take(200), key = { it.entry.id }) { r -> RouteRow(r, catMap[r.entry.categoryId]?.name) { onOpen("route:${r.entry.id}") } }
+    }
+}
+
+private fun walkLikeKind(k: String?) = k == pl.rafal.lifecycle.data.Kind.WALK || k == pl.rafal.lifecycle.data.Kind.RUN
+
+/** Wykres prędkości w czasie trasy. */
+@Composable
+private fun SpeedChart(profile: List<Pair<Long, Double>>) {
+    if (profile.size < 3) return
+    val line = MaterialTheme.colorScheme.primary
+    val grid = MaterialTheme.colorScheme.surfaceVariant
+    val maxV = profile.maxOf { it.second }.coerceAtLeast(5.0)
+    val maxT = profile.last().first.coerceAtLeast(1L)
+    androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(90.dp).padding(vertical = 6.dp)) {
+        listOf(0.25f, 0.5f, 0.75f).forEach { f ->
+            drawLine(grid, androidx.compose.ui.geometry.Offset(0f, size.height * f), androidx.compose.ui.geometry.Offset(size.width, size.height * f))
+        }
+        val path = androidx.compose.ui.graphics.Path()
+        profile.forEachIndexed { i, (t, v) ->
+            val x = size.width * t / maxT
+            val y = size.height * (1f - (v / maxV).toFloat())
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        drawPath(path, line, style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+    }
+    Text(
+        "maks. ${maxV.toInt()} km/h · ${Fmt.durationShort(maxT)}",
+        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/** Podsumowanie wybranych tras: liczba, dystans, czas, prędkość, rekordy, podział na rodzaje. */
+@Composable
+private fun RoutesSummary(list: List<RouteInfo>, catMap: Map<Long, pl.rafal.lifecycle.data.Category>) {
+    val km = list.sumOf { it.entry.distanceM ?: 0.0 }
+    val ms = list.sumOf { it.durationMs }
+    val longest = list.maxBy { it.entry.distanceM ?: 0.0 }
+    val days = list.map { Fmt.toLocalDate(it.entry.startAt) }.distinct().size
+    TrendCard {
+        Row {
+            RStat("${list.size}", "tras", Modifier.weight(1f))
+            RStat(Fmt.distance(km), "dystans", Modifier.weight(1f))
+            RStat(Fmt.durationShort(ms), "w drodze", Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(10.dp))
+        Row {
+            RStat(if (ms > 0) "${(km / (ms / 1000.0) * 3.6).toInt()} km/h" else "—", "średnio", Modifier.weight(1f))
+            RStat(if (days > 0) Fmt.distance(km / days) else "—", "dziennie", Modifier.weight(1f))
+            RStat(Fmt.distance(longest.entry.distanceM ?: 0.0), "najdłuższa", Modifier.weight(1f))
+        }
+        val byCat = list.groupBy { it.entry.categoryId }.mapValues { (_, l) -> l.sumOf { it.entry.distanceM ?: 0.0 } to l.sumOf { it.durationMs } }
+            .toList().sortedByDescending { it.second.first }
+        if (byCat.size > 1) {
+            Spacer(Modifier.height(10.dp))
+            byCat.forEach { (id, v) ->
+                val c = catMap[id]
+                Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CategoryBadge(c, 22.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(c?.name ?: "—", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "${Fmt.distance(v.first)} · ${Fmt.durationShort(v.second)}",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Statystyki tej samej trasy: rozrzut czasu, dystans, najlepsza pora wyjazdu. */
+@Composable
+private fun PairStats(all: List<RouteInfo>) {
+    val worst = all.maxBy { it.durationMs }
+    val dists = all.mapNotNull { it.entry.distanceM?.takeIf { d -> d > 0 } }
+    // Pora wyjazdu co pół godziny → średni czas przejazdu.
+    val bySlot = all.groupBy {
+        val z = java.time.Instant.ofEpochMilli(it.entry.startAt).atZone(Fmt.zone)
+        z.hour * 2 + z.minute / 30
+    }.filterValues { it.size >= 2 }.mapValues { (_, l) -> l.map { it.durationMs }.average() }
+    val bestSlot = bySlot.minByOrNull { it.value }
+    val worstSlot = bySlot.maxByOrNull { it.value }
+    fun slot(s: Int) = "%d:%02d".format(s / 2, (s % 2) * 30)
+    Spacer(Modifier.height(4.dp))
+    Text(
+        "Najwolniej ${Fmt.durationShort(worst.durationMs)} (${Fmt.toLocalDate(worst.entry.startAt).format(dayF)})" +
+            (if (dists.isNotEmpty()) " · średnio ${Fmt.distance(dists.average())}" else ""),
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    if (bestSlot != null && worstSlot != null && bestSlot.key != worstSlot.key) {
+        Text(
+            "Najszybciej, gdy ruszasz ok. ${slot(bestSlot.key)} (śr. ${Fmt.durationShort(bestSlot.value.toLong())}); " +
+                "najwolniej ok. ${slot(worstSlot.key)} (śr. ${Fmt.durationShort(worstSlot.value.toLong())})",
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }

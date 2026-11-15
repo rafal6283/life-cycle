@@ -30,7 +30,22 @@ data class RouteInfo(
     val pairKey: String? get() = if (fromPlace != null && toPlace != null && fromPlace != toPlace) "$fromPlace>$toPlace" else null
 }
 
-data class RouteStats(val distanceM: Double, val avgKmh: Double, val maxKmh: Double, val paceSecPerKm: Double?)
+data class RouteStats(
+    val distanceM: Double,
+    val avgKmh: Double,
+    val maxKmh: Double,
+    val paceSecPerKm: Double?,
+    /** Czas w ruchu (bez postojów dłuższych niż ~20 s). */
+    val movingMs: Long = 0,
+    val stops: Int = 0,
+    val stopMs: Long = 0,
+    val avgMovingKmh: Double = 0.0,
+    /** Czas kolejnych pełnych kilometrów (ms). */
+    val splits: List<Long> = emptyList(),
+    /** Prędkość w czasie: (ms od startu, km/h). */
+    val profile: List<Pair<Long, Double>> = emptyList(),
+    val steps: Long = 0,
+)
 
 object Routes {
     private val moveKinds = setOf(
@@ -132,13 +147,45 @@ object Routes {
         if (dt <= 0) 0.0 else d / dt * 3.6
     }
 
-    fun stats(e: Entry, pts: List<RoutePoint>, kind: String?): RouteStats {
+    fun stats(e: Entry, pts: List<RoutePoint>, kind: String?, steps: Long = 0): RouteStats {
         val d = if (pts.size >= 2) distance(pts) else e.distanceM ?: 0.0
         val dur = ((e.endAt ?: System.currentTimeMillis()) - e.startAt) / 1000.0
-        val sp = speeds(pts).sorted()
+        val raw = speeds(pts)
+        val sp = raw.sorted()
         val max = if (sp.isEmpty()) 0.0 else sp[(sp.size * 0.95).toInt().coerceAtMost(sp.size - 1)]
         val pace = if ((kind == Kind.WALK || kind == Kind.RUN) && d > 200) dur / (d / 1000) else null
-        return RouteStats(d, if (dur > 0) d / dur * 3.6 else 0.0, max, pace)
+        // Postoje: odcinki wolniejsze niż 2 km/h (pieszo 1 km/h) trwające ponad 20 s.
+        val slow = if (kind == Kind.WALK || kind == Kind.RUN) 1.0 else 2.0
+        var stops = 0
+        var stopMs = 0L
+        var runStart: Long? = null
+        for (i in 1 until pts.size) {
+            val v = raw[i - 1]
+            if (v < slow) {
+                if (runStart == null) runStart = pts[i - 1].t
+            } else if (runStart != null) {
+                val len = pts[i - 1].t - runStart
+                if (len >= 20_000L) { stops++; stopMs += len }
+                runStart = null
+            }
+        }
+        runStart?.let { val len = pts.last().t - it; if (len >= 20_000L) { stops++; stopMs += len } }
+        val totalMs = (dur * 1000).toLong()
+        val moving = (totalMs - stopMs).coerceAtLeast(0L)
+        // Międzyczasy co kilometr.
+        val splits = mutableListOf<Long>()
+        var acc = 0.0
+        var last = pts.firstOrNull()?.t ?: e.startAt
+        for (i in 1 until pts.size) {
+            acc += Geo.distance(pts[i - 1].lat, pts[i - 1].lng, pts[i].lat, pts[i].lng)
+            if (acc >= 1000.0 * (splits.size + 1)) { splits += pts[i].t - last; last = pts[i].t }
+        }
+        val t0 = pts.firstOrNull()?.t ?: e.startAt
+        val profile = (1 until pts.size).map { (pts[it].t - t0) to raw[it - 1] }
+        return RouteStats(
+            d, if (dur > 0) d / dur * 3.6 else 0.0, max, pace, moving, stops, stopMs,
+            if (moving > 0) d / (moving / 1000.0) * 3.6 else 0.0, splits, profile, steps,
+        )
     }
 
     /** Opis skąd–dokąd dla przejazdów z zakresu (na podstawie pobytów przed i po). */

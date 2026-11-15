@@ -2,6 +2,7 @@ package pl.rafal.lifecycle.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -354,6 +355,7 @@ fun DayScreen(healthNav: () -> Unit = {}, onOpen: (String) -> Unit = {}) {
                             row.s, catMap[row.s.entry.categoryId],
                             row.s.entry.placeId?.let { placeMap[it] },
                             ongoing = row.s.entry.endAt == null && isToday && now - row.s.end < 60_000,
+                            onLongClick = if (row.s.entry.source == Source.AUTO_MOVE) ({ onOpen("route:${row.s.entry.id}") }) else null,
                         ) { editing = row.s.entry }
                     }
                 }
@@ -406,10 +408,11 @@ private fun SummaryRow(cat: Category?, ms: Long, total: Long) {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun SegmentRow(seg: Segment, cat: Category?, place: Place?, ongoing: Boolean, onClick: () -> Unit) {
+private fun SegmentRow(seg: Segment, cat: Category?, place: Place?, ongoing: Boolean, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 4.dp),
+        Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(horizontal = 16.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.width(52.dp), horizontalAlignment = Alignment.End) {
@@ -444,7 +447,18 @@ private fun SegmentRow(seg: Segment, cat: Category?, place: Place?, ongoing: Boo
                         ?.let { inf -> if (inf.toWork) "do pracy" else "do domu" }
                     else -> null
                 },
-                seg.entry.distanceM?.let { Fmt.distance(it) },
+                seg.entry.distanceM?.takeIf { it > 0 }?.let { d ->
+                    val sec = ((seg.entry.endAt ?: System.currentTimeMillis()) - seg.entry.startAt) / 1000.0
+                    val kind = cat?.kind
+                    val speed = when {
+                        sec <= 0 || d < 200 -> null
+                        kind == pl.rafal.lifecycle.data.Kind.WALK || kind == pl.rafal.lifecycle.data.Kind.RUN ->
+                            (sec / (d / 1000)).let { p -> "%d:%02d min/km".format((p / 60).toInt(), (p % 60).toInt()) }
+                        else -> "${(d / sec * 3.6).toInt()} km/h"
+                    }
+                    Fmt.distance(d) + (speed?.let { " · $it" } ?: "")
+                },
+                if (seg.entry.source == Source.AUTO_MOVE) "🗺️ przytrzymaj, by zobaczyć trasę" else null,
                 Source.label(seg.entry.source),
                 seg.entry.note,
             ).joinToString(" · ")
