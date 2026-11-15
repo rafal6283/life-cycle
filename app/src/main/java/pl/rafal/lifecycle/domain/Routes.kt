@@ -173,12 +173,23 @@ object Routes {
         val totalMs = (dur * 1000).toLong()
         val moving = (totalMs - stopMs).coerceAtLeast(0L)
         // Międzyczasy co kilometr.
+        // Punkty GPS bywają co kilkaset metrów, więc moment przejechania pełnego kilometra
+        // wyznaczamy interpolacją wewnątrz odcinka (a nie „pierwszym punktem za granicą”).
         val splits = mutableListOf<Long>()
         var acc = 0.0
-        var last = pts.firstOrNull()?.t ?: e.startAt
+        var last = pts.firstOrNull()?.t?.toDouble() ?: e.startAt.toDouble()
+        var next = 1000.0
         for (i in 1 until pts.size) {
-            acc += Geo.distance(pts[i - 1].lat, pts[i - 1].lng, pts[i].lat, pts[i].lng)
-            if (acc >= 1000.0 * (splits.size + 1)) { splits += pts[i].t - last; last = pts[i].t }
+            val seg = Geo.distance(pts[i - 1].lat, pts[i - 1].lng, pts[i].lat, pts[i].lng)
+            if (seg <= 0) continue
+            while (acc + seg >= next) {
+                val f = (next - acc) / seg
+                val tc = pts[i - 1].t + f * (pts[i].t - pts[i - 1].t)
+                splits += (tc - last).toLong()
+                last = tc
+                next += 1000.0
+            }
+            acc += seg
         }
         val t0 = pts.firstOrNull()?.t ?: e.startAt
         val step = maxOf(1, pts.size / 240)
@@ -222,4 +233,52 @@ object Routes {
 
     /** Czy dwa czasy przejazdu różnią się istotnie (do porównań „szybciej / wolniej”). */
     fun differs(a: Long, b: Long) = abs(a - b) >= 60_000L
+}
+
+/** Wysokość terenu wzdłuż trasy (model terenu Open-Meteo, ~90 m), z pamięcią podręczną. */
+object RouteElevation {
+    data class Profile(val points: List<Pair<Long, Double>>, val ascent: Double, val descent: Double, val min: Double, val max: Double)
+
+    suspend fun load(ctx: Context, entryId: Long, pts: List<RoutePoint>): Profile? = withContext(Dispatchers.IO) {
+        if (pts.size < 2) return@withContext null
+        val sp = ctx.getSharedPreferences("elevation", Context.MODE_PRIVATE)
+        val t0 = pts.first().t
+        val cached = sp.getString("e$entryId", null)?.split(";")?.mapNotNull { p ->
+            val a = p.split(":")
+            if (a.size != 2) null else (a[0].toLongOrNull() ?: return@mapNotNull null) * 1000 to (a[1].toDoubleOrNull() ?: return@mapNotNull null)
+        }
+        val list = if (!cached.isNullOrEmpty()) cached else {
+            // Do 100 punktów równo rozłożonych w czasie trasy — jedno zapytanie.
+            val n = minOf(100, pts.size)
+            val sample = (0 until n).map { pts[(it.toLong() * (pts.size - 1) / maxOf(1, n - 1)).toInt()] }
+            val url = "https://api.open-meteo.com/v1/elevation?latitude=" +
+                sample.joinToString(",") { String.format(Locale.US, "%.5f", it.lat) } +
+                "&longitude=" + sample.joinToString(",") { String.format(Locale.US, "%.5f", it.lng) }
+            val c = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            c.connectTimeout = 15_000; c.readTimeout = 20_000
+            c.setRequestProperty("User-Agent", "Doba/1.0 (Android)")
+            val got = try {
+                if (c.responseCode != 200) return@withContext null
+                val arr = org.json.JSONObject(c.inputStream.bufferedReader().readText()).getJSONArray("elevation")
+                sample.mapIndexedNotNull { i, p -> if (arr.isNull(i)) null else (p.t - t0) to arr.getDouble(i) }
+            } catch (_: Exception) {
+                return@withContext null
+            } finally {
+                c.disconnect()
+            }
+            sp.edit().putString("e$entryId", got.joinToString(";") { "${it.first / 1000}:${"%.1f".format(Locale.US, it.second)}" }).apply()
+            got
+        }
+        if (list.size < 2) return@withContext null
+        // Wygładzenie i suma podejść / zejść (pomijamy drgania < 2 m).
+        val sm = list.indices.map { i -> list.subList(maxOf(0, i - 1), minOf(list.size, i + 2)).map { it.second }.average() }
+        var up = 0.0
+        var down = 0.0
+        var ref = sm.first()
+        for (v in sm.drop(1)) {
+            val d = v - ref
+            if (d >= 2) { up += d; ref = v } else if (d <= -2) { down -= d; ref = v }
+        }
+        Profile(list, up, down, list.minOf { it.second }, list.maxOf { it.second })
+    }
 }

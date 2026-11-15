@@ -124,6 +124,11 @@ fun RouteScreen(entryId: Long, onBack: () -> Unit, onOpen: (String) -> Unit) {
         }
         value = D(info, pts, same, steps, stats, display)
     }
+    val elevation by produceState<pl.rafal.lifecycle.domain.RouteElevation.Profile?>(null, d) {
+        val dd = d ?: return@produceState
+        val e = dd.info?.entry ?: return@produceState
+        value = pl.rafal.lifecycle.domain.RouteElevation.load(ctx, e.id, dd.pts)
+    }
     var showOthers by remember { mutableStateOf(false) }
     val others by produceState(emptyList<List<RoutePoint>>(), showOthers, d) {
         val dd = d
@@ -202,6 +207,11 @@ fun RouteScreen(entryId: Long, onBack: () -> Unit, onOpen: (String) -> Unit) {
                     Spacer(Modifier.height(12.dp))
                     Text("Prędkość w czasie", style = MaterialTheme.typography.labelLarge)
                     SpeedChart(st.profile)
+                    elevation?.let { el ->
+                        Spacer(Modifier.height(10.dp))
+                        Text("Wysokość w czasie", style = MaterialTheme.typography.labelLarge)
+                        ElevationChart(el)
+                    }
                     Text(
                         "Kolor trasy na mapie: zielony — szybciej, czerwony — wolniej (korki, światła, postoje).",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -230,7 +240,7 @@ fun RouteScreen(entryId: Long, onBack: () -> Unit, onOpen: (String) -> Unit) {
                             }
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                if (walkLikeKind(cat?.kind)) pace(ms / 1000.0) else "${Fmt.durationShort(ms)} · ${(3_600_000.0 / ms).toInt()} km/h",
+                                if (walkLikeKind(cat?.kind)) pace(ms / 1000.0) else "${mmss(ms)} · ${(3_600_000.0 / ms.coerceAtLeast(1)).toInt()} km/h",
                                 style = MaterialTheme.typography.bodySmall, fontWeight = if (ms == best) FontWeight.Bold else FontWeight.Normal,
                             )
                         }
@@ -475,4 +485,36 @@ private fun PairStats(all: List<RouteInfo>) {
             style = MaterialTheme.typography.bodySmall,
         )
     }
+}
+
+private fun mmss(ms: Long): String = "%d:%02d".format(ms / 60_000, (ms / 1000) % 60)
+
+/** Profil wysokości: wypełniony wykres, min/maks i suma podejść. */
+@Composable
+private fun ElevationChart(p: pl.rafal.lifecycle.domain.RouteElevation.Profile) {
+    val fill = Color(0xFF8BD450)
+    val grid = MaterialTheme.colorScheme.surfaceVariant
+    val lo = p.min - (p.max - p.min).coerceAtLeast(10.0) * 0.15
+    val hi = p.max + (p.max - p.min).coerceAtLeast(10.0) * 0.1
+    val maxT = p.points.last().first.coerceAtLeast(1L)
+    androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(90.dp).padding(vertical = 6.dp)) {
+        listOf(0.25f, 0.5f, 0.75f).forEach { f ->
+            drawLine(grid, androidx.compose.ui.geometry.Offset(0f, size.height * f), androidx.compose.ui.geometry.Offset(size.width, size.height * f))
+        }
+        val path = androidx.compose.ui.graphics.Path()
+        fun x(t: Long) = size.width * t / maxT
+        fun y(v: Double) = size.height * (1f - ((v - lo) / (hi - lo)).toFloat())
+        path.moveTo(0f, size.height)
+        p.points.forEach { (t, v) -> path.lineTo(x(t), y(v)) }
+        path.lineTo(x(p.points.last().first), size.height)
+        path.close()
+        drawPath(path, fill.copy(alpha = 0.35f))
+        val line = androidx.compose.ui.graphics.Path()
+        p.points.forEachIndexed { i, (t, v) -> if (i == 0) line.moveTo(x(t), y(v)) else line.lineTo(x(t), y(v)) }
+        drawPath(line, fill, style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+    }
+    Text(
+        "${p.min.toInt()}–${p.max.toInt()} m n.p.m. · ↑ ${p.ascent.toInt()} m · ↓ ${p.descent.toInt()} m · wysokość terenu (Open-Meteo)",
+        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
