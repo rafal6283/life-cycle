@@ -1,6 +1,7 @@
 package pl.rafal.lifecycle.ui
 
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -438,7 +439,7 @@ fun ClockRing(
     // tarcza "nawija się" od północy przy pokazaniu dnia
     val grow = rememberGrow(animKey)
     val touch = if (onLongPress == null) Modifier else Modifier.pointerInput(dayLength) {
-        androidx.compose.foundation.gestures.detectTapGestures(onLongPress = { pos ->
+        detectTapGestures(onLongPress = { pos ->
             val dx = pos.x - size.width / 2f
             val dy = pos.y - size.height / 2f
             // 0 = góra tarczy (północ), zgodnie ze wskazówkami zegara.
