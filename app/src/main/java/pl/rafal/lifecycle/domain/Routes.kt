@@ -181,7 +181,8 @@ object Routes {
             if (acc >= 1000.0 * (splits.size + 1)) { splits += pts[i].t - last; last = pts[i].t }
         }
         val t0 = pts.firstOrNull()?.t ?: e.startAt
-        val profile = (1 until pts.size).map { (pts[it].t - t0) to raw[it - 1] }
+        val step = maxOf(1, pts.size / 240)
+        val profile = (1 until pts.size step step).map { (pts[it].t - t0) to raw[it - 1] }
         return RouteStats(
             d, if (dur > 0) d / dur * 3.6 else 0.0, max, pace, moving, stops, stopMs,
             if (moving > 0) d / (moving / 1000.0) * 3.6 else 0.0, splits, profile, steps,
@@ -189,7 +190,7 @@ object Routes {
     }
 
     /** Opis skąd–dokąd dla przejazdów z zakresu (na podstawie pobytów przed i po). */
-    suspend fun describe(ctx: Context, from: Long, to: Long): List<RouteInfo> = withContext(Dispatchers.Default) {
+    suspend fun describe(ctx: Context, from: Long, to: Long, geocodeSince: Long = 0L): List<RouteInfo> = withContext(Dispatchers.Default) {
         val app = ctx.applicationContext as LifeApp
         val cats = app.db.categories().getAll().associateBy { it.id }
         val places = app.db.places().getAll().associateBy { it.id }
@@ -197,11 +198,12 @@ object Routes {
         val stays = all.filter { it.source == Source.AUTO_STAY || it.placeId != null }
         val moves = all.filter { it.startAt in from until to && isRoute(it, cats) && (it.endAt ?: Long.MAX_VALUE) - it.startAt >= 60_000L }
         val addr = HashMap<String, String?>()
-        suspend fun label(e: Entry?): Pair<String, Long?> {
+        suspend fun label(e: Entry?, geocode: Boolean): Pair<String, Long?> {
             if (e == null) return "?" to null
             e.placeId?.let { id -> places[id]?.let { return it.name to id } }
             val lat = e.lat ?: return (cats[e.categoryId]?.name ?: "?") to null
             val lng = e.lng ?: return (cats[e.categoryId]?.name ?: "?") to null
+            if (!geocode) return (cats[e.categoryId]?.name ?: "?") to null
             val k = String.format(Locale.US, "%.3f,%.3f", lat, lng)
             val a = addr.getOrPut(k) { FieldWork.address(ctx, lat, lng)?.substringBefore(',') }
             return (a ?: cats[e.categoryId]?.name ?: "?") to null
@@ -209,8 +211,9 @@ object Routes {
         moves.map { m ->
             val before = stays.lastOrNull { (it.endAt ?: Long.MAX_VALUE) <= m.startAt + 60_000L && m.startAt - (it.endAt ?: 0L) < 30 * 60_000L }
             val after = stays.firstOrNull { it.startAt >= (m.endAt ?: Long.MAX_VALUE) - 60_000L && it.startAt - (m.endAt ?: 0L) < 30 * 60_000L }
-            val (f, fp) = label(before)
-            val (t, tp) = label(after)
+            val geo = m.startAt >= geocodeSince
+            val (f, fp) = label(before, geo)
+            val (t, tp) = label(after, geo)
             RouteInfo(m, f, t, fp, tp)
         }
     }

@@ -75,9 +75,10 @@ private fun drawRoute(m: org.osmdroid.views.MapView, pts: List<RoutePoint>, colo
     val lo = sorted[(sorted.size * 0.1).toInt().coerceAtMost(sorted.size - 1)]
     val hi = sorted[(sorted.size * 0.9).toInt().coerceAtMost(sorted.size - 1)]
     // Odcinki po kilka punktów w jednym kolorze.
+    val chunk = maxOf(4, pts.size / 60)
     var i = 0
     while (i < pts.size - 1) {
-        val j = minOf(pts.size - 1, i + 4)
+        val j = minOf(pts.size - 1, i + chunk)
         val v = sp.subList(i, j).average()
         m.overlays.add(Polyline(m).apply {
             setPoints(pts.subList(i, j + 1).map { GeoPoint(it.lat, it.lng) })
@@ -94,7 +95,12 @@ fun RouteScreen(entryId: Long, onBack: () -> Unit, onOpen: (String) -> Unit) {
     val app = LifeApp.instance
     val categories by app.repo.categories.collectAsState(initial = emptyList())
     val catMap = remember(categories) { categories.associateBy { it.id } }
-    data class D(val info: RouteInfo?, val pts: List<RoutePoint>, val same: List<RouteInfo>, val steps: Long = 0)
+    data class D(
+        val info: RouteInfo?, val pts: List<RoutePoint>, val same: List<RouteInfo>, val steps: Long = 0,
+        val stats: pl.rafal.lifecycle.domain.RouteStats? = null,
+        /** Uproszczone punkty do rysowania (lżejsza mapa). */
+        val display: List<RoutePoint> = emptyList(),
+    )
     val d by produceState<D?>(null, entryId) {
         val e = app.db.entries().byId(entryId) ?: run { value = D(null, emptyList(), emptyList()); return@produceState }
         val now = System.currentTimeMillis()
@@ -102,7 +108,7 @@ fun RouteScreen(entryId: Long, onBack: () -> Unit, onOpen: (String) -> Unit) {
             ?: RouteInfo(e, "?", "?", null, null)
         val pts = Routes.points(ctx, e)
         val same = info.pairKey?.let { key ->
-            Routes.describe(ctx, now - 365L * 86_400_000L, now).filter { it.pairKey == key && it.entry.id != e.id }
+            Routes.describe(ctx, now - 180L * 86_400_000L, now, geocodeSince = Long.MAX_VALUE).filter { it.pairKey == key && it.entry.id != e.id }
                 .sortedByDescending { it.entry.startAt }
         } ?: emptyList()
         // Kroki z kubełków godzinowych — proporcjonalnie do czasu trasy w każdej godzinie.
@@ -112,55 +118,57 @@ fun RouteScreen(entryId: Long, onBack: () -> Unit, onOpen: (String) -> Unit) {
             val ov = (minOf(end, h + 3_600_000L) - maxOf(e.startAt, h)).coerceAtLeast(0L)
             v * ov / 3_600_000L
         }
-        value = D(info, pts, same, steps)
+        val kind = app.db.categories().getAll().firstOrNull { it.id == e.categoryId }?.kind
+        val (stats, display) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            Routes.stats(e, pts, kind, steps) to Routes.simplify(pts, 4.0)
+        }
+        value = D(info, pts, same, steps, stats, display)
     }
     var showOthers by remember { mutableStateOf(false) }
     val others by produceState(emptyList<List<RoutePoint>>(), showOthers, d) {
         val dd = d
-        value = if (showOthers && dd != null) dd.same.take(10).map { Routes.points(ctx, it.entry) } else emptyList()
+        value = if (showOthers && dd != null) dd.same.take(10).map { Routes.simplify(Routes.points(ctx, it.entry), 10.0) } else emptyList()
     }
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
-        val x = d
-        val info = x?.info
-        item { ScreenHeader(if (info != null) "${info.from} → ${info.to}" else "Trasa", onBack = onBack) }
-        if (x == null) { item { Text("Wczytuję…", Modifier.padding(20.dp)) }; return@LazyColumn }
-        if (info == null) { item { Text("Nie ma już tego wpisu.", Modifier.padding(20.dp)) }; return@LazyColumn }
+    val x = d
+    val info = x?.info
+    Column(Modifier.fillMaxSize()) {
+        ScreenHeader(if (info != null) "${info.from} → ${info.to}" else "Trasa", onBack = onBack)
+        if (x == null) { Text("Wczytuję…", Modifier.padding(20.dp)); return@Column }
+        if (info == null) { Text("Nie ma już tego wpisu.", Modifier.padding(20.dp)); return@Column }
         val e = info.entry
         val cat = catMap[e.categoryId]
-        item {
+        Text(
+            "${cat?.name ?: "Przejazd"} · ${Fmt.dayTitle(Fmt.toLocalDate(e.startAt))} · ${Fmt.time(e.startAt)}–${e.endAt?.let { Fmt.time(it) } ?: "teraz"}",
+            Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        // Mapa stoi na stałe nad przewijaną listą — nie jest odtwarzana przy przewijaniu.
+        if (x.display.size < 2) {
             Text(
-                "${cat?.name ?: "Przejazd"} · ${Fmt.dayTitle(Fmt.toLocalDate(e.startAt))} · ${Fmt.time(e.startAt)}–${e.endAt?.let { Fmt.time(it) } ?: "teraz"}",
-                Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                "Brak punktów GPS dla tej trasy (telefon mógł oszczędzać baterię albo trasa była bardzo krótka).",
+                Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        }
-        item {
-            if (x.pts.size < 2) {
-                Text(
-                    "Brak punktów GPS dla tej trasy (telefon mógł oszczędzać baterię albo trasa była bardzo krótka).",
-                    Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                OsmMap(
-                    key = Triple(e.id, others.size, showOthers),
-                    modifier = Modifier.padding(16.dp).fillMaxWidth().height(340.dp).clip(RoundedCornerShape(20.dp)),
-                ) { m ->
-                    others.forEach { drawRoute(m, it, false, 0x668E8E93, 7f) }
-                    drawRoute(m, x.pts, true)
-                    m.overlays.add(Marker(m).apply {
-                        position = GeoPoint(x.pts.first().lat, x.pts.first().lng)
-                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM); title = "Start ${Fmt.time(e.startAt)}"
-                    })
-                    m.overlays.add(Marker(m).apply {
-                        position = GeoPoint(x.pts.last().lat, x.pts.last().lng)
-                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM); title = "Meta ${e.endAt?.let { Fmt.time(it) } ?: ""}"
-                    })
-                    m.fit(x.pts.map { GeoPoint(it.lat, it.lng) }, 17.0)
-                }
+        } else {
+            OsmMap(
+                key = Triple(e.id, others.size, showOthers),
+                modifier = Modifier.padding(16.dp).fillMaxWidth().height(260.dp).clip(RoundedCornerShape(20.dp)),
+            ) { m ->
+                others.forEach { drawRoute(m, it, false, 0x668E8E93, 7f) }
+                drawRoute(m, x.display, true)
+                m.overlays.add(Marker(m).apply {
+                    position = GeoPoint(x.display.first().lat, x.display.first().lng)
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM); title = "Start ${Fmt.time(e.startAt)}"
+                })
+                m.overlays.add(Marker(m).apply {
+                    position = GeoPoint(x.display.last().lat, x.display.last().lng)
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM); title = "Meta ${e.endAt?.let { Fmt.time(it) } ?: ""}"
+                })
+                m.fit(x.display.map { GeoPoint(it.lat, it.lng) }, 17.0)
             }
         }
+    LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 32.dp)) {
         item {
-            val st = remember(x) { Routes.stats(e, x.pts, cat?.kind, x.steps) }
+            val st = x.stats ?: return@item
             val walkLike = cat?.kind == pl.rafal.lifecycle.data.Kind.WALK || cat?.kind == pl.rafal.lifecycle.data.Kind.RUN
             TrendCard {
                 Row {
@@ -201,8 +209,8 @@ fun RouteScreen(entryId: Long, onBack: () -> Unit, onOpen: (String) -> Unit) {
                 }
             }
         }
-        val st0 = Routes.stats(e, x.pts, cat?.kind)
-        if (st0.splits.size >= 2) {
+        val st0 = x.stats
+        if (st0 != null && st0.splits.size >= 2) {
             item { SectionTitle("Kilometr po kilometrze") }
             item {
                 TrendCard {
@@ -265,6 +273,7 @@ fun RouteScreen(entryId: Long, onBack: () -> Unit, onOpen: (String) -> Unit) {
             items(x.same.take(15), key = { it.entry.id }) { r -> RouteRow(r, catMap[r.entry.categoryId]?.name) { onOpen("route:${r.entry.id}") } }
         }
     }
+    }
 }
 
 private fun Modifier.barHeight(f: Float) = this.then(Modifier.height((70 * f.coerceIn(0.05f, 1f)).dp))
@@ -313,7 +322,9 @@ fun RoutesScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     val catMap = remember(categories) { categories.associateBy { it.id } }
     val list by produceState<List<RouteInfo>?>(null) {
         val now = System.currentTimeMillis()
-        value = Routes.describe(ctx, now - 365L * 86_400_000L, now).sortedByDescending { it.entry.startAt }
+        // Adresy (Geocoder, sieć) tylko dla ostatnich 30 dni — starsze trasy opisujemy nazwami miejsc.
+        value = Routes.describe(ctx, now - 365L * 86_400_000L, now, geocodeSince = now - 30L * 86_400_000L)
+            .sortedByDescending { it.entry.startAt }
     }
     var cat by rememberSaveable { mutableStateOf<Long?>(null) }
     var pair by rememberSaveable { mutableStateOf<String?>(null) }
