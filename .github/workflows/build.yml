@@ -26,8 +26,10 @@ jobs:
       - name: Przykłady wymiany (kontrakt z Rytmu Snu)
         run: |
           git clone -q --depth 1 --filter=blob:none --sparse https://github.com/rafal6283/nocny-licznik /tmp/nl
-          git -C /tmp/nl sparse-checkout set packages/koofr_sync/wymiana
-          mkdir -p app/src/test/resources/wymiana && cp /tmp/nl/packages/koofr_sync/wymiana/*.json app/src/test/resources/wymiana/
+          git -C /tmp/nl sparse-checkout set packages/koofr_sync/wymiana packages/koofr_sync/test
+          mkdir -p app/src/test/resources/wymiana app/src/test/resources/koofr
+          cp /tmp/nl/packages/koofr_sync/wymiana/*.json app/src/test/resources/wymiana/
+          cp /tmp/nl/packages/koofr_sync/test/vectors.json app/src/test/resources/koofr/
 
       - name: Testy
         run: |
