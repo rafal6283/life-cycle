@@ -151,8 +151,12 @@ class TrackingService : LifecycleService() {
                 .setMinUpdateIntervalMillis(15_000L)
                 .build()
         } else {
-            LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 120_000L)
-                .setMinUpdateIntervalMillis(60_000L)
+            // Postój: wyjście z miejsca wykrywa głównie rozpoznawanie aktywności (STILL → ruch przełącza na GPS),
+            // więc lokalizacja rzadziej, odczyty zbierane paczkami (telefon budzi się rzadziej).
+            val saving = BatteryState.saving(this)
+            LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, if (saving) 600_000L else 240_000L)
+                .setMinUpdateIntervalMillis(120_000L)
+                .setMaxUpdateDelayMillis(if (saving) 1_200_000L else 600_000L)
                 .build()
         }
         try {
@@ -177,6 +181,18 @@ class TrackingService : LifecycleService() {
 
     companion object {
         const val TAG = "LifeCycle"
+    }
+}
+
+/** Stan baterii: oszczędzanie energii albo < 15% bez ładowania. */
+object BatteryState {
+    fun saving(ctx: Context): Boolean = try {
+        val pm = ctx.getSystemService(PowerManager::class.java)
+        val bm = ctx.getSystemService(android.os.BatteryManager::class.java)
+        val low = bm != null && !bm.isCharging && bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY) in 0..14
+        (pm?.isPowerSaveMode == true) || low
+    } catch (_: Exception) {
+        false
     }
 }
 
@@ -300,13 +316,24 @@ class WatchdogWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
         } catch (e: Exception) {
             Log.w(TrackingService.TAG, "$name nie powiodło się", e)
         }
+        // Bateria: cięższe zadania (Health Connect, baza, sieć) nie co 15 min, tylko co swój odstęp;
+        // przy oszczędzaniu baterii lub < 15% (bez ładowania) — dwa razy rzadziej.
+        val sp = ctx.getSharedPreferences("watchdog", Context.MODE_PRIVATE)
+        val now0 = System.currentTimeMillis()
+        val slow = BatteryState.saving(ctx)
+        suspend fun every(name: String, minutes: Long, block: suspend () -> Unit) {
+            val gap = minutes * 60_000L * (if (slow) 2 else 1)
+            if (now0 - sp.getLong(name, 0L) < gap - 60_000L) return
+            safe(name, block)
+            sp.edit().putLong(name, now0).apply()
+        }
         safe("Wykrywanie snu") { SleepDetector.run(ctx) }
-        safe("Import treningów") { WorkoutImporter.run(ctx) }
-        safe("Posiłki") { MealImporter.run(ctx) }
-        safe("Środki transportu") { TransportDetect.run(ctx) }
-        safe("Import kroków") { StepsImporter.run(ctx) }
-        safe("Pomiary zdrowotne") { HealthSync.run(ctx) }
-        safe("Czas przed ekranem") { ScreenTime.sync(ctx) }
+        every("Import treningów", 30) { WorkoutImporter.run(ctx) }
+        every("Posiłki", 30) { MealImporter.run(ctx) }
+        every("Środki transportu", 30) { TransportDetect.run(ctx) }
+        every("Import kroków", 30) { StepsImporter.run(ctx) }
+        every("Pomiary zdrowotne", 30) { HealthSync.run(ctx) }
+        every("Czas przed ekranem", 60) { ScreenTime.sync(ctx) }
         safe("Sprawdzanie celów") { GoalChecker.run(ctx) }
         safe("Podsumowanie tygodnia") { pl.rafal.lifecycle.domain.Summaries.maybeNotify(ctx) }
         safe("Przypomnienie o nastroju") { MoodReminder.run(ctx) }
@@ -317,10 +344,12 @@ class WatchdogWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
         safe("Widżet") { DobaWidget.updateAll(ctx) }
         val db = (applicationContext as LifeApp).db
         val now = System.currentTimeMillis()
-        // Najpierw utrwal trasy, potem kasuj stare punkty GPS.
-        try { pl.rafal.lifecycle.domain.Routes.archive(applicationContext) } catch (e: Exception) { Log.w(TrackingService.TAG, "Trasy: ${e.message}") }
-        db.locations().prune(now - 90L * 24 * 3_600_000)
-        db.screenOff().prune(now - 30L * 24 * 3_600_000)
+        // Najpierw utrwal trasy, potem kasuj stare punkty GPS — wystarczy kilka razy na dobę.
+        every("Trasy i porządki", 6 * 60) {
+            pl.rafal.lifecycle.domain.Routes.archive(applicationContext)
+            db.locations().prune(now - 90L * 24 * 3_600_000)
+            db.screenOff().prune(now - 30L * 24 * 3_600_000)
+        }
         return Result.success()
     }
 
