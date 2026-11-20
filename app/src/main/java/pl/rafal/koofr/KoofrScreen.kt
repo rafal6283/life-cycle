@@ -727,6 +727,93 @@ private fun ExchangeSection(ex: KoofrExchange, working: Boolean, act: (String?, 
             RowItem("Wymień teraz", last?.let { "Ostatnio: $it" } ?: "Automatycznie przy otwarciu aplikacji i w tle") {
                 if (!working) act(null) { Koofr.lastExchange.value = Koofr.exchangeNow(force = true) }
             }
+            Div()
+            var status by remember { mutableStateOf(false) }
+            RowItem("Stan wymiany", if (status) "Ukryj" else "Co i kiedy zostało wysłane i wczytane, błędy") { status = !status }
+            if (status) ExchangeStatus(ex, last)
         }
+    }
+}
+
+/** Nazwy aplikacji i opisy plików — jak w kontrakcie wymiany (WYMIANA.md w repozytorium Rytmu Snu). */
+private val APPS = mapOf(
+    "rytm-snu" to "Rytm Snu", "polar-ekg" to "Polar EKG", "kreska" to "Kreska", "doba" to "Doba",
+    "dziennik-talerza" to "Dziennik talerza", "teczka" to "Teczka", "portfel" to "Portfel", "forma" to "Forma",
+)
+
+private fun senderOf(name: String): String? = when {
+    name.startsWith("czynniki-") -> when (name.removePrefix("czynniki-")) {
+        "sen" -> "rytm-snu"; "polar" -> "polar-ekg"; "posilki" -> "dziennik-talerza"; "leki" -> "teczka"
+        "portfel" -> "portfel"; "forma" -> "forma"; "ruch" -> "doba"; else -> null
+    }
+    name.startsWith("rytm-snu") -> "rytm-snu"
+    name.startsWith("polar-") -> "polar-ekg"
+    name.startsWith("kreska-") -> "kreska"
+    else -> null
+}
+
+private fun ago(ms: Long?): String {
+    if (ms == null || ms <= 0) return "nie wiadomo kiedy"
+    val m = (System.currentTimeMillis() - ms) / 60_000
+    return when {
+        m < 1 -> "przed chwilą"
+        m < 60 -> "$m min temu"
+        m < 24 * 60 -> "${m / 60} h temu"
+        m < 48 * 60 -> "wczoraj"
+        else -> "${m / (24 * 60)} dni temu"
+    }
+}
+
+@Composable
+private fun ExchangeStatus(ex: KoofrExchange, refresh: Any?) {
+    var files by remember { mutableStateOf<Map<String, WebDav.Entry>?>(null) }
+    var log by remember { mutableStateOf<Map<String, Map<String, Any>>>(emptyMap()) }
+    var err by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(refresh) {
+        withContext(Dispatchers.IO) {
+            log = Koofr.sync.exchangeLog()
+            try {
+                files = Koofr.sync.exchangeFiles()
+                err = null
+            } catch (e: Exception) {
+                files = emptyMap()
+                err = e.message
+            }
+        }
+    }
+    fun num(v: Any?) = (v as? Number)?.toLong()
+    val f = files
+    if (f == null) {
+        Muted("Wczytywanie…", Modifier.padding(16.dp))
+        return
+    }
+    err?.let { ErrorCard("Nie udało się odczytać plików z Koofr: $it") }
+    val sent = log.filterValues { it["s"] != null }.keys
+    val pulls = { n: String -> ex.sources.any { (p, _) -> n == p || n.startsWith("$p-") } }
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Label("WYSYŁANE Z TEJ APLIKACJI")
+        if (sent.isEmpty()) Muted("Nic jeszcze nie wysłano z tego telefonu.")
+        sent.sorted().forEach { n -> Muted("↑ $n — wysłano ${ago(num(log[n]?.get("s")))}") }
+        Spacer(Modifier.height(10.dp))
+        Label("OD INNYCH APLIKACJI")
+        val others = f.keys.filter { it !in sent }.sortedBy { if (pulls(it)) 0 else 1 }
+        if (others.isEmpty()) Muted("Na Koofr nie ma jeszcze plików od innych aplikacji.")
+        others.forEach { n ->
+            val e = log[n]
+            val from = senderOf(n)?.let { APPS[it] } ?: "nieznana aplikacja"
+            val changed = f[n]?.modified
+            val stale = changed != null && System.currentTimeMillis() - changed > 7L * 24 * 3600_000
+            val state = when {
+                !pulls(n) -> "ta aplikacja go nie używa"
+                e?.get("e") != null -> "BŁĄD ${ago(num(e["ea"]))}: ${e["e"]}"
+                num(e?.get("r")) != null -> "wczytany ${ago(num(e?.get("r")))}"
+                else -> "jeszcze nie wczytany"
+            }
+            val color = if (e?.get("e") != null && pulls(n)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+            Text("↓ $n (od: $from, zmieniony ${ago(changed)}${if (stale) ", dawno" else ""}) — $state",
+                style = MaterialTheme.typography.bodySmall, color = color, modifier = Modifier.padding(vertical = 2.dp))
+        }
+        Spacer(Modifier.height(6.dp))
+        Muted("Plik, który długo się nie zmienia, zwykle oznacza, że aplikacja-nadawca nie była ostatnio otwierana.")
     }
 }

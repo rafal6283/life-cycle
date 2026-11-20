@@ -195,6 +195,7 @@ object Koofr {
         val msg = listOfNotNull(
             if (sent.isNotEmpty()) "wysłano: ${sent.joinToString()}" else null,
             if (got.isNotEmpty()) "pobrano: ${got.joinToString()}" else null,
+            if (sync.lastPullErrors.isNotEmpty()) "błąd wczytania: ${sync.lastPullErrors.keys.joinToString()} (szczegóły w „Stan wymiany”)" else null,
         ).joinToString(" · ").ifEmpty { "bez zmian" }
         lastExchange.value = msg
         msg

@@ -321,6 +321,13 @@ object Summaries {
                 rows += SumRow("Kalorie (Dziennik talerza)", "${kcal.toInt()} kcal / dzień" + if (alc > 0) " · alkohol $alc ${if (alc == 1) "dzień" else "dni"}" else "",
                     dNum(kcal, avg("dziennik-talerza", "kcal", prev.start, prev.end), 0, " kcal"), null, "food", 0xFFFF6B22.toInt())
             }
+            val train = daysIn("forma", p.start, p.end).filter { (it["train_min"] ?: 0.0) > 0 }
+            if (train.isNotEmpty()) {
+                val min = train.sumOf { it["train_min"] ?: 0.0 }
+                val prevMin = daysIn("forma", prev.start, prev.end).sumOf { it["train_min"] ?: 0.0 }
+                rows += SumRow("Treningi (Forma)", "${train.size} ${if (train.size == 1) "dzień" else "dni"} · ${Fmt.durationShort((min * 60_000).toLong())}",
+                    dMs((min * 60_000).toLong(), (prevMin * 60_000).toLong()), min >= prevMin)
+            }
             val meds = daysIn("teczka", p.start, p.end)
             if (meds.isNotEmpty()) {
                 val doses = meds.sumOf { it["doses"] ?: 0.0 }

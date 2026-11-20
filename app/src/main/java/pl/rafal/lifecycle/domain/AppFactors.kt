@@ -21,21 +21,26 @@ object AppFactors {
         val out = HashMap<String, Map<LocalDate, Map<String, Double>>>()
         dir(ctx).listFiles()?.forEach { f ->
             try {
-                val j = JSONObject(f.readText())
-                if (j.optString("format") != "czynniki-dnia") return@forEach
-                val days = HashMap<LocalDate, Map<String, Double>>()
-                val arr = j.optJSONArray("days") ?: return@forEach
-                for (i in 0 until arr.length()) {
-                    val d = arr.getJSONObject(i)
-                    val date = LocalDate.parse(d.getString("date"))
-                    val vals = HashMap<String, Double>()
-                    d.keys().forEach { k -> if (k != "date") (d.opt(k) as? Number)?.let { vals[k] = it.toDouble() } }
-                    days[date] = vals
-                }
-                out[j.optString("source")] = days
+                parse(f.readText())?.let { (src, days) -> out[src] = days }
             } catch (_: Exception) {
             }
         }
         return out
+    }
+
+    /** Plik „czynniki-dnia” v1: (źródło, dzień → pole → wartość); null = inny format. */
+    fun parse(text: String): Pair<String, Map<LocalDate, Map<String, Double>>>? {
+        val j = JSONObject(text)
+        if (j.optString("format") != "czynniki-dnia") return null
+        val days = HashMap<LocalDate, Map<String, Double>>()
+        val arr = j.optJSONArray("days") ?: return null
+        for (i in 0 until arr.length()) {
+            val d = arr.getJSONObject(i)
+            val date = LocalDate.parse(d.getString("date"))
+            val vals = HashMap<String, Double>()
+            d.keys().forEach { k -> if (k != "date") (d.opt(k) as? Number)?.let { vals[k] = it.toDouble() } }
+            days[date] = vals
+        }
+        return j.optString("source") to days
     }
 }

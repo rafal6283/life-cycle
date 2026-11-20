@@ -130,7 +130,36 @@ object ExchangeImport {
         "Nie udało się zaimportować pliku"
     }
 
+    /** Plik „wymiana-zdarzen” rozłożony na wiersze bazy (bez zapisu) — osobno, żeby dało się testować. */
+    class Parsed(val source: String, val label: String, val rows: List<ExtEvent>, val legacyAf: List<ExtEvent>)
+
     suspend fun importText(text: String): String {
+        val p = parse(text)
+        val source = p.source
+        val label = p.label
+        val out = p.rows
+        val legacyAf = p.legacyAf
+        val db = LifeApp.instance.db
+        db.ext().deleteSource(source, label)
+        db.ext().insertAll(out)
+        if (legacyAf.isNotEmpty() && db.ext().all().none { it.source == SRC_RHYTHM && it.type == "window" }) {
+            db.ext().deleteSource(SRC_RHYTHM, "")
+            db.ext().insertAll(legacyAf)
+        }
+        val n = out.count { it.type != "window" && it.type != "day_total" }
+        if (!ExtVisibility.visible(source, label)) {
+            return "Zaimportowano z ${sourceLabel(source, label)}, ale to źródło jest ukryte — włącz je w Ustawieniach → Dane z innych aplikacji"
+        }
+        return "Zaimportowano z ${sourceLabel(source, label)}: " + when (source) {
+            SRC_NIGHT -> "FF: $n, nocy: ${out.count { it.type == "window" }}"
+            SRC_ECG -> "$n epizodów AF"
+            SRC_RHYTHM -> "$n epizodów nieregularnego rytmu, nocy z opaską: ${out.count { it.type == "window" }}"
+            else -> "$n kliknięć, ${out.count { it.type == "day_total" }} dni"
+        }
+    }
+
+    /** Rzuca IllegalArgumentException z opisem po polsku, gdy to nie jest obsługiwany plik. */
+    fun parse(text: String): Parsed {
         val j = try {
             JSONObject(text)
         } catch (e: Exception) {
@@ -182,23 +211,7 @@ object ExchangeImport {
                 value = t.getDouble("total"),
             )
         }
-        val db = LifeApp.instance.db
-        db.ext().deleteSource(source, label)
-        db.ext().insertAll(out)
-        if (legacyAf.isNotEmpty() && db.ext().all().none { it.source == SRC_RHYTHM && it.type == "window" }) {
-            db.ext().deleteSource(SRC_RHYTHM, "")
-            db.ext().insertAll(legacyAf)
-        }
-        val n = out.count { it.type != "window" && it.type != "day_total" }
-        if (!ExtVisibility.visible(source, label)) {
-            return "Zaimportowano z ${sourceLabel(source, label)}, ale to źródło jest ukryte — włącz je w Ustawieniach → Dane z innych aplikacji"
-        }
-        return "Zaimportowano z ${sourceLabel(source, label)}: " + when (source) {
-            SRC_NIGHT -> "FF: $n, nocy: ${out.count { it.type == "window" }}"
-            SRC_ECG -> "$n epizodów AF"
-            SRC_RHYTHM -> "$n epizodów nieregularnego rytmu, nocy z opaską: ${out.count { it.type == "window" }}"
-            else -> "$n kliknięć, ${out.count { it.type == "day_total" }} dni"
-        }
+        return Parsed(source, label, out, legacyAf)
     }
 
     /** Liczba zdarzeń dziennie dla danego źródła/licznika. Dla Kreski — sumy dni (z korektami). */

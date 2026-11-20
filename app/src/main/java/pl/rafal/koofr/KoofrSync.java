@@ -594,6 +594,7 @@ public final class KoofrSync {
         if (!force && digest.equals(store.read(key))) return false;
         dav().putAtomic(myExchange() + "/" + name + ".ksy", crypto.sealExchange(data));
         store.write(key, digest);
+        logUpdate(name, "s", System.currentTimeMillis(), null);
         return true;
     }
 
@@ -601,6 +602,8 @@ public final class KoofrSync {
         requireReady();
         dav().delete(myExchange() + "/" + name + ".ksy");
         store.delete(K + "ex.pub." + userId + "." + name);
+        Map<String, Map<String, Object>> log = exchangeLog();
+        if (log.remove(name) != null) logSave(log);
     }
 
     /** Pliki wymiany tej osoby: nazwa → wpis (czas zmiany, rozmiar). */
@@ -624,6 +627,7 @@ public final class KoofrSync {
     /** Pobiera zmienione pliki wymiany, które przepuszcza filtr; zwraca nazwy przetworzonych. */
     public List<String> pullExchange(ExchangeFilter filter, ExchangeHandler handler, boolean force) throws KsException {
         requireReady();
+        lastPullErrors.clear();
         List<String> done = new ArrayList<>();
         for (Map.Entry<String, WebDav.Entry> e : exchangeFiles().entrySet()) {
             if (!filter.want(e.getKey())) continue;
@@ -632,17 +636,64 @@ public final class KoofrSync {
             if (!force && stamp.equals(store.read(key))) continue;
             byte[] f = dav().get(myExchange() + "/" + e.getKey() + ".ksy");
             if (f == null) continue;
+            // Zły plik jednej aplikacji nie blokuje pozostałych (kontrakt: packages/koofr_sync/WYMIANA.md w Rytmie Snu).
             try {
                 handler.handle(e.getKey(), crypto.openExchange(f));
-            } catch (KsException ex) {
-                throw ex;
             } catch (Exception ex) {
-                throw new KsException("Nie udało się wczytać „" + e.getKey() + "”: " + ex.getMessage());
+                String msg = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+                lastPullErrors.put(e.getKey(), msg);
+                logUpdate(e.getKey(), "ea", System.currentTimeMillis(), msg);
+                continue;
             }
             store.write(key, stamp);
+            logUpdate(e.getKey(), "r", System.currentTimeMillis(), null);
             done.add(e.getKey());
         }
         return done;
+    }
+
+    /** Błędy wczytania z ostatniego pullExchange: nazwa → opis. */
+    public final Map<String, String> lastPullErrors = new LinkedHashMap<>();
+
+    /**
+     * Dziennik wymiany na tym telefonie (jak exchangeLog w Darcie): nazwa → {"s": wysłano ms, "r": wczytano ms,
+     * "ea": błąd ms, "e": opis błędu}. Do ekranu „Stan wymiany”.
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Map<String, Object>> exchangeLog() {
+        Map<String, Map<String, Object>> out = new LinkedHashMap<>();
+        if (userId == null) return out;
+        String raw = store.read(K + "ex.log." + userId);
+        if (raw == null) return out;
+        try {
+            for (Map.Entry<String, Object> e : Json.obj(raw).entrySet()) {
+                if (e.getValue() instanceof Map) out.put(e.getKey(), new LinkedHashMap<>((Map<String, Object>) e.getValue()));
+            }
+        } catch (Exception ignored) {
+        }
+        return out;
+    }
+
+    private void logSave(Map<String, Map<String, Object>> log) {
+        store.write(K + "ex.log." + userId, Json.write(log));
+    }
+
+    /** field "s"/"r": sukces (czyści błąd przy "r"); "ea": błąd z opisem [error]. */
+    private void logUpdate(String name, String field, long at, String error) {
+        if (userId == null) return;
+        Map<String, Map<String, Object>> log = exchangeLog();
+        Map<String, Object> e = log.get(name);
+        if (e == null) {
+            e = new LinkedHashMap<>();
+            log.put(name, e);
+        }
+        e.put(field, at);
+        if (field.equals("ea")) e.put("e", error);
+        if (field.equals("r")) {
+            e.remove("e");
+            e.remove("ea");
+        }
+        logSave(log);
     }
 
     // ------------------------------------------------------------ podgląd za zgodą

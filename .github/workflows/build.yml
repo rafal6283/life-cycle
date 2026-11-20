@@ -23,6 +23,21 @@ jobs:
         with:
           gradle-version: "8.9"
 
+      - name: Przykłady wymiany (kontrakt z Rytmu Snu)
+        run: |
+          git clone -q --depth 1 --filter=blob:none --sparse https://github.com/rafal6283/nocny-licznik /tmp/nl
+          git -C /tmp/nl sparse-checkout set packages/koofr_sync/wymiana
+          mkdir -p app/src/test/resources/wymiana && cp /tmp/nl/packages/koofr_sync/wymiana/*.json app/src/test/resources/wymiana/
+
+      - name: Testy
+        run: |
+          set -o pipefail
+          gradle testDebugUnitTest --no-daemon 2>&1 | tee test.log || {
+            grep -E "FAILED|^e: |What went wrong" -A3 test.log | head -60 | while IFS= read -r line; do echo "::error::$line"; done
+            for f in app/build/test-results/testDebugUnitTest/*.xml; do grep -A6 "<failure" "$f" | head -24; done
+            exit 1
+          }
+
       - name: Build release APK
         run: |
           set -o pipefail

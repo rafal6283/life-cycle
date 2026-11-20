@@ -84,7 +84,7 @@ object DobaCloud : KoofrApp {
             mapOf("czynniki-ruch" to pl.rafal.lifecycle.domain.DayFactors.build())
 
         override val sources = listOf(
-            "czynniki" to "Sen, posiłki, leki, HRV i Portfel – do podsumowań tygodnia",
+            "czynniki" to "Sen, posiłki, leki, HRV, treningi i Portfel – do podsumowań tygodnia",
             "rytm-snu" to "Rytm Snu (FF w nocy)",
             "kreska" to "Kreska (udostępnione liczniki)",
             "polar-ekg" to "Polar EKG (epizody AF)",
