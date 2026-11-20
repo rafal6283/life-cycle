@@ -14,7 +14,7 @@ import java.time.LocalDate
 
 /**
  * Kontrakt wymiany (WYMIANA.md w repozytorium Rytmu Snu): każdy plik, który Doba pobiera, musi się
- * wczytać bez wyjątku. Przykłady `wymiana/*.json` pobiera CI do src/test/resources/wymiana.
+ * wczytać bez wyjątku. Przykłady z folderu `wymiana` (pliki .json) pobiera CI do src/test/resources/wymiana.
  */
 class WymianaTest {
     private val dir = File("src/test/resources/wymiana")
