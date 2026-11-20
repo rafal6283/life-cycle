@@ -21,22 +21,22 @@ class RoutesTest {
 
     @Test
     fun dystansIMiedzyczasyZGestychPunktow() {
-        val pts = line(5, 0.5, 60) // 2 km w 4 min = 30 km/h
+        val pts = line(5, 0.5025, 60) // 2,01 km w 4 min ≈ 30 km/h (końcówka poniżej pełnego km nie jest międzyczasem)
         val s = Routes.stats(entry(pts), pts, Kind.BIKE)
-        assertEquals(2000.0, s.distanceM, 1.0)
-        assertEquals(30.0, s.avgKmh, 0.1)
+        assertEquals(2010.0, s.distanceM, 1.0)
+        assertEquals(30.15, s.avgKmh, 0.1)
         assertEquals(2, s.splits.size)
-        s.splits.forEach { assertEquals(120_000.0, it.toDouble(), 500.0) }
+        s.splits.forEach { assertEquals(119_400.0, it.toDouble(), 500.0) }
         assertNull(s.paceSecPerKm) // tempo tylko dla chodu i biegu
     }
 
     @Test
     fun rzadkiePunktyGpsDajaRozsadneMiedzyczasy() {
-        // dwa punkty 3 km od siebie w 6 min: każdy kilometr po 2 min (wcześniej wychodziło 250 km/h)
-        val pts = line(2, 3.0, 360)
+        // dwa punkty ~3 km od siebie w 6 min: każdy kilometr po ~2 min (wcześniej wychodziło 250 km/h)
+        val pts = line(2, 3.03, 360)
         val s = Routes.stats(entry(pts), pts, Kind.TRAVEL)
         assertEquals(3, s.splits.size)
-        s.splits.forEach { assertEquals(120_000.0, it.toDouble(), 500.0) }
+        s.splits.forEach { assertEquals(118_800.0, it.toDouble(), 500.0) }
     }
 
     @Test
