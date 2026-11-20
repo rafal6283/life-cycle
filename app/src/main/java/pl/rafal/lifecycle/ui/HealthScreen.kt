@@ -143,6 +143,12 @@ fun HealthScreen() {
     LaunchedEffect(Unit) { sync(false) }
 
     val byMetric = remember(samples) { samples.orEmpty().groupBy { it.metric } }
+    // „Moje zdrowie”: czynniki dnia z moich aplikacji (Koofr) + epizody AF
+    val factors by produceState(emptyMap<String, Map<LocalDate, Map<String, Double>>>(), tick) {
+        value = withContext(Dispatchers.IO) { pl.rafal.lifecycle.domain.AppFactors.load(ctx) }
+    }
+    val myDays = remember(factors, ext) { pl.rafal.lifecycle.domain.MyHealth.days(factors, ext, today.minusDays(13), today) }
+    val myTrends = remember(myDays) { pl.rafal.lifecycle.domain.MyHealth.trends(myDays) }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
@@ -153,6 +159,13 @@ fun HealthScreen() {
                 } else {
                     IconButton(onClick = { sync(true) }) { Icon(Icons.Filled.Sync, "Synchronizuj") }
                 }
+            }
+        }
+
+        if (myDays.any { it.hasData }) {
+            item(key = "my") {
+                MyHealthCard(myDays, myTrends)
+                Spacer(Modifier.height(12.dp))
             }
         }
 
