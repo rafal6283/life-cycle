@@ -304,6 +304,21 @@ fun StatsScreen(onSummary: (String) -> Unit = {}, onHealth: () -> Unit = {}) {
                     }
                 }
 
+                // Tydzień w kratkach: wybrana kategoria (albo najczęstsza) w godzinach tygodnia
+                if (type != PeriodType.WEEK || s.days >= 5) {
+                    val heatCat = selected ?: sorted.firstOrNull()?.first
+                    val e = entries
+                    if (heatCat != null && e != null) {
+                        item { SectionTitle("Tydzień w kratkach · ${catMap[heatCat]?.name ?: ""}") }
+                        item {
+                            val heat = remember(e, heatCat, type, startDay) {
+                                pl.rafal.lifecycle.domain.WeekHeat.compute(e, heatCat, period.start, period.end, System.currentTimeMillis())
+                            }
+                            WeekHeatCard(heat, catColor(catMap[heatCat]), catMap[heatCat]?.name ?: "", "$type-$startDay-$heatCat")
+                        }
+                    }
+                }
+
                 trendData?.let { td ->
                     if (td.first.any { it.isNotEmpty() }) {
                         item { SectionTitle("Typowy dzień · co robisz o danej godzinie") }
