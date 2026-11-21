@@ -152,7 +152,10 @@ fun PoiChips(pois: List<Poi>?, onPick: (Poi) -> Unit) {
             "Szukam miejsc w pobliżu…", style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        pois.isEmpty() -> {}
+        pois.isEmpty() -> Text(
+            "Brak podpowiedzi z OpenStreetMap (nic nazwanego w pobliżu albo brak internetu).",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         else -> {
             Text("W pobliżu (OpenStreetMap)", style = MaterialTheme.typography.labelLarge)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

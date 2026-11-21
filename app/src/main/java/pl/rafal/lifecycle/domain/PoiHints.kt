@@ -36,8 +36,15 @@ data class Poi(
 }
 
 object PoiHints {
-    private const val OVERPASS = "https://overpass-api.de/api/interpreter"
+    // Główny serwer bywa przeciążony (429/504) – wtedy kolejne publiczne kopie Overpass.
+    private val OVERPASS = listOf(
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter",
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    )
     private const val TTL = 60L * 86_400_000L
+    /** Pusta odpowiedź trzymana krócej – mapa się uzupełnia, a chwilowy błąd nie może blokować podpowiedzi na 2 miesiące. */
+    private const val TTL_EMPTY = 3L * 86_400_000L
     private val mutex = Mutex()
 
     private val types = mapOf(
@@ -78,7 +85,9 @@ object PoiHints {
         sp.getString(key, null)?.let { s ->
             try {
                 val j = JSONObject(s)
-                if (System.currentTimeMillis() - j.getLong("t") < TTL) return@withContext parse(j.getJSONArray("e"), lat, lng)
+                val e = j.getJSONArray("e")
+                val ttl = if (e.length() == 0) TTL_EMPTY else TTL
+                if (System.currentTimeMillis() - j.getLong("t") < ttl) return@withContext parse(e, lat, lng)
             } catch (_: Exception) {
             }
         }
@@ -93,20 +102,18 @@ object PoiHints {
                     "area.a[amenity~\"^(grave_yard|hospital|university|school|kindergarten|place_of_worship|marketplace|clinic)$\"];" +
                     "area.a[leisure~\"^(park|sports_centre|stadium|garden)$\"];area.a[shop];)->.inside;" +
                     ".near out center tags;.inside out tags;"
-                val c = URL(OVERPASS).openConnection() as HttpURLConnection
-                c.requestMethod = "POST"
-                c.doOutput = true
-                c.connectTimeout = 15_000
-                c.readTimeout = 30_000
-                c.setRequestProperty("User-Agent", "Doba/1.0 (Android)")
-                c.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-                val els = try {
-                    c.outputStream.use { it.write(("data=" + URLEncoder.encode(q, "UTF-8")).toByteArray()) }
-                    if (c.responseCode != 200) throw IllegalStateException("HTTP ${c.responseCode}")
-                    JSONObject(c.inputStream.bufferedReader().readText()).optJSONArray("elements") ?: JSONArray()
-                } finally {
-                    c.disconnect()
+                var last: Exception? = null
+                var els: JSONArray? = null
+                for (url in OVERPASS) {
+                    try {
+                        els = query(url, q)
+                        break
+                    } catch (e: Exception) {
+                        last = e
+                        Log.w("Doba", "Podpowiedzi OSM ($url): ${e.message}")
+                    }
                 }
+                if (els == null) throw last ?: IllegalStateException("brak odpowiedzi")
                 sp.edit().putString(key, JSONObject().put("t", System.currentTimeMillis()).put("e", els).toString()).apply()
                 parse(els, lat, lng)
             } catch (e: Exception) {
@@ -116,7 +123,37 @@ object PoiHints {
         }
     }
 
-    private fun parse(els: JSONArray, lat: Double, lng: Double): List<Poi> {
+    private fun query(url: String, q: String): JSONArray {
+        val c = URL(url).openConnection() as HttpURLConnection
+        c.requestMethod = "POST"
+        c.doOutput = true
+        c.connectTimeout = 15_000
+        c.readTimeout = 30_000
+        c.setRequestProperty("User-Agent", "Doba/1.0 (Android)")
+        c.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+        try {
+            c.outputStream.use { it.write(("data=" + URLEncoder.encode(q, "UTF-8")).toByteArray()) }
+            if (c.responseCode != 200) throw IllegalStateException("HTTP ${c.responseCode}")
+            return elementsOf(c.inputStream.bufferedReader().readText())
+        } finally {
+            c.disconnect()
+        }
+    }
+
+    /**
+     * Elementy odpowiedzi Overpass. Przekroczony czas/pamięć serwer zgłasza kodem 200 z „remark” i niepełną
+     * (często pustą) listą – to błąd, nie „brak miejsc”, więc nie trafia do pamięci podręcznej.
+     */
+    internal fun elementsOf(body: String): JSONArray {
+        val j = JSONObject(body)
+        val remark = j.optString("remark")
+        if (remark.contains("error", ignoreCase = true) || remark.contains("timed out", ignoreCase = true)) {
+            throw IllegalStateException("Overpass: $remark")
+        }
+        return j.optJSONArray("elements") ?: JSONArray()
+    }
+
+    internal fun parse(els: JSONArray, lat: Double, lng: Double): List<Poi> {
         val out = LinkedHashMap<String, Poi>()
         for (i in 0 until els.length()) {
             val e = els.getJSONObject(i)

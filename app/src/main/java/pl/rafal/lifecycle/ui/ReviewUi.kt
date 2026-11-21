@@ -216,8 +216,15 @@ private fun ReviewCard(
     val hint by produceState<pl.rafal.lifecycle.domain.CalendarHint?>(null, item) {
         value = CalendarHints.events(ctx, item.start, item.end).firstOrNull()
     }
+    // Propozycja nazwy: kalendarz > miejsce z OSM > adres. Adres przychodzi zwykle przed odpowiedzią OSM,
+    // więc dopóki użytkownik nie zmienił nazwy, lepsza propozycja ją zastępuje.
+    var autoName by remember { mutableStateOf("") }
     LaunchedEffect(address, hint, pois) {
-        if (placeName.isBlank()) placeName = hint?.title ?: pois?.firstOrNull()?.label ?: address?.substringBefore(',') ?: ""
+        val best = hint?.title ?: pois?.firstOrNull()?.label ?: address?.substringBefore(',') ?: ""
+        if ((placeName.isBlank() || placeName == autoName) && best.isNotBlank()) {
+            placeName = best
+            autoName = best
+        }
     }
 
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
