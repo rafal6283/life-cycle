@@ -92,6 +92,20 @@ class Prefs(ctx: Context) {
         get() = p.getBoolean("sleepAuto", true)
         set(v) = p.edit().putBoolean("sleepAuto", v).apply()
 
+    /** Zwykła pora zasypiania (minuty od północy) do szacowania snu; -1 = z nawyków. */
+    var sleepBedtime: Int
+        get() = p.getInt("sleepBedtime", -1)
+        set(v) = p.edit().putInt("sleepBedtime", v).apply()
+
+    /** Chwile podłączenia ładowarki z ostatnich 10 dni (pomocne przy szacowaniu początku snu). */
+    val chargeTimes: List<Long>
+        get() = p.getString("chargeTimes", "")!!.split(',').mapNotNull { it.toLongOrNull() }
+
+    fun addChargeTime(t: Long) {
+        val keep = (chargeTimes + t).filter { it > t - 10 * 86_400_000L }.takeLast(60)
+        p.edit().putString("chargeTimes", keep.joinToString(",")).apply()
+    }
+
     var workoutsHc: Boolean
         get() = p.getBoolean("workoutsHc", true)
         set(v) = p.edit().putBoolean("workoutsHc", v).apply()

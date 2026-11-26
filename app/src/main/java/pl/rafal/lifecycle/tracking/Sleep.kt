@@ -15,6 +15,7 @@ import pl.rafal.lifecycle.LifeApp
 import pl.rafal.lifecycle.data.Entry
 import pl.rafal.lifecycle.data.Kind
 import pl.rafal.lifecycle.data.Source
+import pl.rafal.lifecycle.domain.SleepEstimate
 import pl.rafal.lifecycle.util.Fmt
 import pl.rafal.lifecycle.util.Prefs
 import java.time.Instant
@@ -141,10 +142,18 @@ object SleepDetector {
         }
 
         val today = LocalDate.now()
+        val zone = Fmt.zone
+        // zwykła pora snu z ostatnich 30 dni (bez nocy, które zaraz przeliczymy)
+        val hist = db.entries().getRange(now - 35 * 24 * H, now).filter { it.categoryId == sleepCat.id && it.endAt != null }
+        val trusted = hist.filter { it.source == Source.SLEEP_HC || it.source == Source.MANUAL }.map { it.startAt to it.endAt!! } +
+            hc.filter { it.first < from }
+        val autoHist = hist.filter { it.source == Source.SLEEP_AUTO && it.startAt < from && it.note == null }.map { it.startAt to it.endAt!! }
+        val norm = SleepEstimate.norm(trusted, autoHist, prefs.sleepBedtime, zone)
+        val charges = prefs.chargeTimes
         for (i in 4 downTo 0) {
             val d = today.minusDays(i.toLong())
-            val wStart = d.atTime(19, 0).atZone(Fmt.zone).toInstant().toEpochMilli()
-            val wEnd = d.plusDays(1).atTime(13, 0).atZone(Fmt.zone).toInstant().toEpochMilli()
+            val wStart = d.atTime(17, 0).atZone(zone).toInstant().toEpochMilli()
+            val wEnd = d.plusDays(1).atTime(13, 0).atZone(zone).toInstant().toEpochMilli()
             if (wStart > now) continue
             db.entries().deleteSourceIn(Source.SLEEP_AUTO, wStart, wEnd)
             if (hc.any { it.first < wEnd && it.second > wStart }) continue
@@ -163,11 +172,18 @@ object SleepDetector {
                 }
             }
             val best = merged.maxByOrNull { it.second - it.first } ?: continue
-            if (best.second - best.first >= 3 * H) {
-                db.entries().insert(
-                    Entry(startAt = best.first, endAt = best.second, categoryId = sleepCat.id, source = Source.SLEEP_AUTO)
-                )
-            }
+            if (best.second - best.first < 3 * H) continue
+            val steps = db.steps().getRange(best.first - 2 * H, best.second)
+                .groupBy { it.hourStart }.mapValues { (_, v) -> v.maxOf { it.steps } }
+            val n = SleepEstimate.night(best.first, best.second, norm, steps, charges, zone)
+            if (n.end - n.start < 3 * H) continue
+            val note = listOfNotNull(
+                if (n.estimatedStart) "początek szacowany – telefon nieużywany od ${Fmt.time(best.first)}" else null,
+                if (n.estimatedEnd) "koniec z porannych kroków – telefon dopiero o ${Fmt.time(best.second)}" else null,
+            ).joinToString("; ").ifEmpty { null }
+            db.entries().insert(
+                Entry(startAt = n.start, endAt = n.end, categoryId = sleepCat.id, source = Source.SLEEP_AUTO, note = note)
+            )
         }
     }
 }

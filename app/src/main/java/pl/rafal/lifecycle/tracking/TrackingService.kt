@@ -75,6 +75,7 @@ class TrackingService : LifecycleService() {
             when (i.action) {
                 Intent.ACTION_SCREEN_OFF -> app.engine.onScreenOff(now)
                 Intent.ACTION_SCREEN_ON -> app.appScope.launch { app.engine.onScreenOn(now) }
+                Intent.ACTION_POWER_CONNECTED -> Prefs(c).addChargeTime(now)
             }
         }
     }
@@ -93,6 +94,7 @@ class TrackingService : LifecycleService() {
             IntentFilter().apply {
                 addAction(Intent.ACTION_SCREEN_OFF)
                 addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_POWER_CONNECTED)
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )

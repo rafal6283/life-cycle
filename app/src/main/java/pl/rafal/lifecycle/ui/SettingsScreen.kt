@@ -90,6 +90,8 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
     var tracking by remember { mutableStateOf(prefs.tracking) }
     var sleepHc by remember { mutableStateOf(prefs.sleepHc) }
     var sleepAuto by remember { mutableStateOf(prefs.sleepAuto) }
+    var bedtime by remember { mutableIntStateOf(prefs.sleepBedtime) }
+    var bedDialog by remember { mutableStateOf(false) }
     var workouts by remember { mutableStateOf(prefs.workoutsHc) }
     var stepsHc by remember { mutableStateOf(prefs.stepsHc) }
     var commutes by remember { mutableStateOf(prefs.commutes) }
@@ -202,6 +204,14 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
             SwitchRow("Wykrywaj sen automatycznie", "Z nocnej przerwy w używaniu telefonu", sleepAuto) {
                 sleepAuto = it
                 prefs.sleepAuto = it
+            }
+            if (sleepAuto) {
+                HorizontalDivider(Modifier.padding(start = 16.dp))
+                NavRow(
+                    "Zwykła pora zasypiania",
+                    (if (bedtime < 0) "Z nawyków" else "%d:%02d".format(bedtime / 60, bedtime % 60)) +
+                        " — gdy telefon odkładasz wcześnie wieczorem",
+                ) { bedDialog = true }
             }
             HorizontalDivider(Modifier.padding(start = 16.dp))
             SwitchRow("Treningi z Health Connect", "Dokładne godziny i dystans z zegarka", workouts) {
@@ -489,6 +499,15 @@ fun SettingsScreen(onOpen: (String) -> Unit) {
     }
 
     if (hcCheck) HealthConnectCheckDialog { hcCheck = false }
+    if (bedDialog) BedtimeDialog(bedtime, onDismiss = { bedDialog = false }) { v ->
+        bedtime = v
+        prefs.sleepBedtime = v
+        bedDialog = false
+        scope.launch {
+            withContext(Dispatchers.IO) { try { SleepDetector.run(ctx) } catch (_: Exception) {} }
+            Toast.makeText(ctx, "Sen przeliczony", Toast.LENGTH_SHORT).show()
+        }
+    }
     if (stepGoalDialog) StepGoalDialog { stepGoalDialog = false; stepGoalTick++ }
     if (stepFixDialog) {
         AlertDialog(
@@ -832,4 +851,29 @@ private suspend fun restoreDefaultPalette(categories: List<Category>) {
             ?: continue
         repo.saveCategory(c.copy(color = d.color, icon = d.icon))
     }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun BedtimeDialog(cur: Int, onDismiss: () -> Unit, onSet: (Int) -> Unit) {
+    val init = if (cur < 0) 22 * 60 + 30 else cur
+    val state = androidx.compose.material3.rememberTimePickerState(initialHour = init / 60, initialMinute = init % 60, is24Hour = true)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Zwykła pora zasypiania") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(
+                    "Gdy telefon leży nieużywany od wczesnego wieczoru, Doba przyjmie, że sen zaczął się o tej porze " +
+                        "(albo przy podłączeniu ładowarki w jej okolicy), a nie w chwili odłożenia telefonu. " +
+                        "„Z nawyków” – pora z nocy z zegarka, wpisanych ręcznie lub gdy telefon był używany do późna (domyślnie 22:30).",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(Modifier.height(12.dp))
+                androidx.compose.material3.TimePicker(state)
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSet(state.hour * 60 + state.minute) }) { Text("Ustaw") } },
+        dismissButton = { TextButton(onClick = { onSet(-1) }) { Text("Z nawyków") } },
+    )
 }
