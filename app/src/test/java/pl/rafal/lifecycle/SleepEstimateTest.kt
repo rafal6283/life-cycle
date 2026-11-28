@@ -59,4 +59,14 @@ class SleepEstimateTest {
         val r = SleepEstimate.night(ms(d, 18, 0), ms(n1, 7, 0), n, emptyMap(), emptyList(), zone)
         assertEquals(ms(d, 23, 30), r.start)
     }
+
+    @Test
+    fun polozenie_sie_wczesniej_niz_zwykle_nie_jest_przesuwane() {
+        val late = SleepEstimate.Norm(0, 7 * 60, 10) // zwykle zasypia o północy
+        val r = SleepEstimate.night(ms(d, 23, 0), ms(n1, 6, 45), late, emptyMap(), emptyList(), zone)
+        assertEquals(ms(d, 23, 0), r.start)
+        assertFalse(r.estimatedStart)
+        val r2 = SleepEstimate.night(ms(d, 21, 30), ms(n1, 6, 45), late, emptyMap(), emptyList(), zone)
+        assertEquals(ms(d, 21, 30), r2.start)
+    }
 }

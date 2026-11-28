@@ -24,6 +24,10 @@ object SleepEstimate {
     const val DEFAULT_BED = 22 * 60 + 30
     const val DEFAULT_WAKE = 6 * 60 + 30
 
+    /** Odłożenie telefonu w tych godzinach (minuty od północy) uznajemy za „wcześnie wieczorem”. */
+    const val EARLY_FROM = 15 * 60
+    const val EARLY_TO = 21 * 60
+
     data class Norm(val bedMin: Int, val wakeMin: Int, val fromNights: Int)
 
     data class Night(val start: Long, val end: Long, val estimatedStart: Boolean, val estimatedEnd: Boolean)
@@ -83,7 +87,10 @@ object SleepEstimate {
 
         var start = max(gapStart, awake)
         var estStart = awake > gapStart
-        if (gapStart < bed - 30 * MIN) {
+        // tylko gdy telefon odłożono wcześnie wieczorem (przed 21:00) i ≥ 1 h przed zwykłą porą snu –
+        // późniejsze odłożenie telefonu to zwykle po prostu pójście spać (choćby wcześniej niż zwykle)
+        val putDown = Instant.ofEpochMilli(gapStart).atZone(zone).toLocalTime().let { it.hour * 60 + it.minute }
+        if (putDown in EARLY_FROM until EARLY_TO && gapStart < bed - H) {
             // telefon odłożony dużo przed zwykłą porą snu: zasypianie o zwykłej porze albo przy ładowarce
             val charge = charges.filter { it in max(gapStart, bed - H)..(bed + 90 * MIN) && it < gapEnd }.minOrNull()
             start = max(charge ?: bed, awake)

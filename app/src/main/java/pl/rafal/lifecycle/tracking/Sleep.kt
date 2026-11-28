@@ -15,6 +15,7 @@ import pl.rafal.lifecycle.LifeApp
 import pl.rafal.lifecycle.data.Entry
 import pl.rafal.lifecycle.data.Kind
 import pl.rafal.lifecycle.data.Source
+import pl.rafal.lifecycle.domain.ExchangeImport
 import pl.rafal.lifecycle.domain.SleepEstimate
 import pl.rafal.lifecycle.util.Fmt
 import pl.rafal.lifecycle.util.Prefs
@@ -150,6 +151,9 @@ object SleepDetector {
         val autoHist = hist.filter { it.source == Source.SLEEP_AUTO && it.startAt < from && it.note == null }.map { it.startAt to it.endAt!! }
         val norm = SleepEstimate.norm(trusted, autoHist, prefs.sleepBedtime, zone)
         val charges = prefs.chargeTimes
+        val rytmSnu = db.ext().all()
+            .filter { it.type == "window" && it.source == ExchangeImport.SRC_NIGHT && (it.end ?: 0L) > from - 24 * H }
+            .map { it.start to it.end!! }
         for (i in 4 downTo 0) {
             val d = today.minusDays(i.toLong())
             val wStart = d.atTime(17, 0).atZone(zone).toInstant().toEpochMilli()
@@ -157,7 +161,19 @@ object SleepDetector {
             if (wStart > now) continue
             db.entries().deleteSourceIn(Source.SLEEP_AUTO, wStart, wEnd)
             if (hc.any { it.first < wEnd && it.second > wStart }) continue
+            // sen z Health Connect zapisany wcześniej (np. gdy odczyt w tle się nie powiódł) też ma pierwszeństwo
+            if (db.entries().countCatSourceIn(sleepCat.id, Source.SLEEP_HC, wStart, wEnd) > 0) continue
             if (db.entries().countCatSourceIn(sleepCat.id, Source.MANUAL, wStart, wEnd) > 0) continue
+
+            // noc nagrywana w Rytmie Snu (plik wymiany / Koofr) – gdy nie trafiła do Health Connect
+            val rs = rytmSnu.filter { it.first < wEnd && it.second > wStart && it.first >= wStart - 2 * H && it.second - it.first >= 3 * H }
+                .maxByOrNull { it.second - it.first }
+            if (rs != null) {
+                db.entries().insert(
+                    Entry(startAt = rs.first, endAt = rs.second, categoryId = sleepCat.id, source = Source.SLEEP_AUTO, note = "z Rytmu Snu")
+                )
+                continue
+            }
 
             val offs = db.screenOff().range(wStart, wEnd)
                 .map { max(it.startAt, wStart) to min(it.endAt, wEnd) }
